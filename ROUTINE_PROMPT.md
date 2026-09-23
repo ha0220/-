@@ -35,6 +35,6 @@ Artifact 도구 `action: "read"`로 https://claude.ai/artifact/J17MUZo9cCVX45qaz
 ## 4단계 — 게시와 알림
 - 스크래치패드에 `briefing-YYYY-MM-DD.html`로 저장하고, `<title>`은 `한국 경제 정책 시장 브리핑 MM.DD` 형식으로 한다.
 - Artifact 도구로 새 페이지로 게시한다(url 없이 publish, icon: "chart", description: "YYYY년 M월 D일 아침 한국 경제·정책·시장 브리핑.").
-- 게시 후 PushNotification으로 알림을 보낸다: "한국 경제 정책 시장 브리핑 MM.DD 도착 — (핵심 한 줄) <artifact 링크>" (200자 이내).
-- 마지막 응답에는 링크와 3줄 요약만 남긴다. 사용자에게 질문하지 말고 끝까지 자율적으로 완료한다.
+- 게시 후 PushNotification으로 알림을 보낸다: "경제 정책 브리핑 MM.DD 도착 — (핵심 한 줄) <artifact 링크>" (200자 이내).
+- 마지막 응답은 "경제 정책 브리핑 MM.DD"로 시작하고, 링크와 3줄 요약만 남긴다(알림에는 짧은 이름을 쓰고, 페이지 제목은 정식 이름을 유지). 사용자에게 질문하지 말고 끝까지 자율적으로 완료한다.
 
