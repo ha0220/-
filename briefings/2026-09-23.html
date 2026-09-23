@@ -1,0 +1,376 @@
+<title>증시 브리핑 09.23</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#F3F5F7; --paper:#FFFFFF; --ink:#15202B; --ink-2:#44515E; --ink-3:#6B7784;
+  --rule:#DCE1E6; --band:#E9EEF2; --accent:#1F4E79; --accent-soft:#E3ECF5;
+  --up:#D1352B; --down:#1F5FD1; --warn:#B7791F; --warn-soft:#FBF1DE; --ok:#2F7A4F;
+  --fact:#2F6B55; --view:#7A4E9E; --est:#9A6A14;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F151B; --paper:#161E26; --ink:#E6EBF0; --ink-2:#B4BEC8; --ink-3:#8793A0;
+    --rule:#2A3542; --band:#1C2631; --accent:#8DB8E3; --accent-soft:#1D2D3D;
+    --up:#FF6B61; --down:#6FA0FF; --warn:#E6B45A; --warn-soft:#2E2618; --ok:#6CC495;
+    --fact:#7CC7A6; --view:#C3A1E0; --est:#E0B45F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F151B; --paper:#161E26; --ink:#E6EBF0; --ink-2:#B4BEC8; --ink-3:#8793A0;
+  --rule:#2A3542; --band:#1C2631; --accent:#8DB8E3; --accent-soft:#1D2D3D;
+  --up:#FF6B61; --down:#6FA0FF; --warn:#E6B45A; --warn-soft:#2E2618; --ok:#6CC495;
+  --fact:#7CC7A6; --view:#C3A1E0; --est:#E0B45F;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16px;line-height:1.7;padding-inline:16px;padding-block:24px 56px;word-break:keep-all;overflow-wrap:anywhere}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+.num,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.35}
+p{margin:0}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* masthead */
+.mast{display:flex;flex-direction:column;gap:10px;border-bottom:3px solid var(--ink);padding-bottom:16px}
+.mast .kicker{font-size:13px;letter-spacing:.12em;color:var(--ink-3);font-weight:600}
+.mast h1{font-size:clamp(28px,6vw,40px);font-weight:700;letter-spacing:-.01em}
+.mast .meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:14px;color:var(--ink-2)}
+.pill{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}
+
+/* summary */
+.lead{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:20px 22px;display:flex;flex-direction:column;gap:12px}
+.lead h2{font-size:15px;letter-spacing:.08em;color:var(--accent)}
+.lead ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px}
+.lead li{font-size:16.5px}
+.lead li b{font-weight:700}
+
+/* tickers */
+.tick{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.tick div{background:var(--paper);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.tick .k{font-size:12.5px;color:var(--ink-3);font-weight:600;letter-spacing:.02em}
+.tick .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:19px;font-weight:600}
+.tick .d{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:13.5px;font-weight:500}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--ink-3)}
+.note{font-size:13px;color:var(--ink-3)}
+
+/* sections */
+section{display:flex;flex-direction:column;gap:14px}
+section>h2{font-size:21px;font-weight:700;display:flex;align-items:baseline;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+section>h2 .tag{font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--ink-3)}
+.item{display:flex;flex-direction:column;gap:6px;padding-block:4px}
+.item h3{font-size:17px;font-weight:700}
+.item p{color:var(--ink-2)}
+.item p b{color:var(--ink)}
+.impact{font-size:14.5px;background:var(--band);border-radius:6px;padding:8px 12px;color:var(--ink)}
+.impact b{color:var(--accent)}
+.b{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;border:1px solid currentColor;margin-right:6px;vertical-align:2px}
+.b.f{color:var(--fact)} .b.v{color:var(--view)} .b.e{color:var(--est)}
+.list{display:flex;flex-direction:column;gap:18px}
+
+/* tables */
+.tbl{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14.5px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:12.5px;letter-spacing:.06em;color:var(--ink-3);font-weight:600;background:var(--band)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+
+/* scenarios */
+.scen{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.scen div{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.scen h3{font-size:15px}
+.scen p{font-size:14.5px;color:var(--ink-2)}
+.scen .bull h3{color:var(--up)} .scen .bear h3{color:var(--down)} .scen .base h3{color:var(--ink)}
+
+/* my portfolio */
+.mine{background:var(--accent-soft);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.mine ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:8px}
+
+/* checklist */
+.check{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.check li{display:flex;gap:10px;align-items:flex-start;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:10px 12px}
+.check li::before{content:"";flex:0 0 16px;height:16px;margin-top:5px;border:2px solid var(--accent);border-radius:3px}
+
+.src{font-size:13px;color:var(--ink-3);display:flex;flex-direction:column;gap:6px}
+.src ul{margin:0;padding-left:1.2em;columns:2 280px;column-gap:24px}
+.src li{break-inside:avoid;margin-bottom:4px}
+footer{font-size:12.5px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:12px}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="kicker">MORNING MARKET BRIEFING · 한국 경제·정책·시장</div>
+  <h1>증시 브리핑 — 2026년 9월 23일(수)</h1>
+  <div class="meta">
+    <span>발행 06:30 KST</span>
+    <span>데이터 기준: 국내 9/22 종가 · 미국 9/22(현지) 종가</span>
+    <span class="pill">추석 연휴 전 마지막 거래일 · 9/24~25 휴장, 9/28(월) 재개장</span>
+  </div>
+</header>
+
+<div class="lead">
+  <h2>오늘 아침 3줄 요약</h2>
+  <ol>
+    <li><b>나스닥 이틀 연속 사상 최고(27,244)</b> — 반도체 강세, 유가 하락. 반면 은행주 급락(JP모건 -3.3%)으로 다우는 -0.36%.</li>
+    <li><b>원/달러 1,358.2원, 하루 22.8원 급락</b> — 추석 전 수출업체 달러 매도 + 미·이란 뉴욕 직접협상(3시간) 기대. 7월 8일 이후 최대 낙폭.</li>
+    <li><b>오늘 국내 증시는 연휴 전 마지막 장</b> — 나흘 휴장 중 <b>마이크론 실적·미·이란 2차 협상</b>이 나옵니다. 추격매수보다 포지션 점검이 우선입니다.</li>
+  </ol>
+</div>
+
+<div>
+  <div class="tick" role="list" aria-label="주요 시장 지표">
+    <div role="listitem"><span class="k">코스피</span><span class="v">7,017.91</span><span class="d up">▲10.19 (+0.15%)</span></div>
+    <div role="listitem"><span class="k">코스닥</span><span class="v">834.38</span><span class="d down">▼0.23%</span></div>
+    <div role="listitem"><span class="k">원/달러 (15:30)</span><span class="v">1,358.2</span><span class="d down">▼22.8원</span></div>
+    <div role="listitem"><span class="k">다우존스</span><span class="v">51,863.69</span><span class="d down">▼0.36%</span></div>
+    <div role="listitem"><span class="k">나스닥</span><span class="v">27,244.28</span><span class="d up">▲0.45% 최고치</span></div>
+    <div role="listitem"><span class="k">S&amp;P500</span><span class="v">≈7,765</span><span class="d flat">보합권</span></div>
+    <div role="listitem"><span class="k">WTI (10월물)</span><span class="v">$94.99</span><span class="d down">▼1.24%</span></div>
+    <div role="listitem"><span class="k">브렌트 (11월물)</span><span class="v">$99.25</span><span class="d down">▼1.09%</span></div>
+    <div role="listitem"><span class="k">美 10년물</span><span class="v">≈4.61%</span><span class="d down">소폭 하락</span></div>
+    <div role="listitem"><span class="k">美 기준금리</span><span class="v">3.75~4.00%</span><span class="d up">9/16 +0.25%p</span></div>
+    <div role="listitem"><span class="k">韓 기준금리</span><span class="v">3.00%</span><span class="d up">8/27 +0.25%p</span></div>
+    <div role="listitem"><span class="k">9월 1~20일 수출</span><span class="v">$714억</span><span class="d up">+78.3% YoY</span></div>
+  </div>
+  <p class="note" style="margin-top:8px">한국식 표기: 상승 빨강 ▲ / 하락 파랑 ▼. S&amp;P500 종가와 美 10년물은 매체별 수치가 달라 근사치(≈)로 표기 — 증권사 HTS에서 확인하세요.</p>
+</div>
+
+<p class="note"><span class="b f">사실</span>보도·공식 발표로 확인된 내용 &nbsp; <span class="b v">해석</span>시장·전문가 해석 &nbsp; <span class="b e">추정</span>브리핑 작성자의 추론(확인 필요)</p>
+
+<!-- 1. 글로벌 -->
+<section>
+  <h2>글로벌 시장 <span class="tag">GLOBAL</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>나스닥 이틀째 최고치, 다우는 은행주에 발목</h3>
+      <p><span class="b f">사실</span>9월 22일(현지) 다우 51,863.69(-0.36%), 나스닥 27,244.28(+0.45%)로 나스닥은 이틀 연속 종가 최고치. 전날(21일)에는 나스닥이 2.26% 급등해 27,122로 처음 27,000선을 넘었습니다. 샌디스크 +6.8%(목표가 상향), 마이크론 +5%, 엔비디아 +0.7%. 반대로 <b>JP모건 -3.3%</b>, 뱅크오브아메리카 -3% 등 금융주가 약세였습니다.</p>
+      <p><span class="b v">해석</span>AI 쇼핑 에이전트가 결제·금융 업종을 잠식할 수 있다는 우려, 3분기 실적 시즌 전 차익실현, 자금의 기술주 이동이 원인으로 거론됩니다. 일부 전략가는 “2000년 닷컴 버블과 닮았다”는 경고도 냈습니다.</p>
+      <div class="impact"><b>한국 시장 영향</b> — 반도체(삼성전자·SK하이닉스·PCB/기판)에는 우호적. 다만 美 금융주 약세는 국내 은행·보험주 투자심리에 부담이 될 수 있습니다.</div>
+    </div>
+    <div class="item">
+      <h3>미·이란, 유엔본부서 3시간 직접협상 … 유가 2주래 최저</h3>
+      <p><span class="b f">사실</span>트럼프 대통령은 유엔총회 연설에서 이란에 “합의해 재건할지, 신속한 전멸을 택할지”라며 압박하는 한편, 윗코프 특사·쿠슈너가 이란 대표단과 약 3시간 회담했고 <b>23일 추가 회담</b>이 있다고 밝혔습니다. 이란 측은 “봉쇄를 풀면 호르무즈 해협을 열겠다”는 입장. 사우디 동서 송유관 재가동과 호르무즈 경유 수출 증가로 WTI $94.99, 브렌트 $99.25로 하락했습니다.</p>
+      <p><span class="b v">해석</span>협상 기대는 커졌지만 트럼프가 “중간선거 후 타결” 가능성을 시사해 단기 타결은 불확실합니다. 이란 군부는 “국내 정치 선전”이라고 반발했습니다.</p>
+      <div class="impact"><b>한국 시장 영향</b> — 유가 하락은 원화 강세·항공·화학(원가)·정유(재고손실) 순으로 파급. 협상 결렬 시 유가 $100 재돌파와 환율 반등 위험.</div>
+    </div>
+    <div class="item">
+      <h3>연준, 3년 2개월 만에 금리 인상 후 ‘추가 인상’ 신호</h3>
+      <p><span class="b f">사실</span>연준(워시 의장)은 9월 16일 기준금리를 3.75~4.00%로 0.25%p 인상(만장일치). 점도표상 18명 중 16명이 연내 최소 1회 추가 인상을 전망했습니다. 美 10년물은 4.6% 안팎에서 유가 하락에 소폭 내렸습니다.</p>
+      <div class="impact"><b>한국 시장 영향</b> — 한·미 모두 ‘인상 사이클’. 고배당주·리츠의 밸류에이션 부담, 대신 예금·단기채·파킹형 ETF 금리는 높게 유지.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. 국내 증시 -->
+<section>
+  <h2>국내 증시 리뷰 <span class="tag">KOREA MARKET</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>코스피 2% 급등 출발 → 7,017 ‘턱걸이’ 마감</h3>
+      <p><span class="b f">사실</span>코스피는 7,161.61(+2.20%)로 출발해 장중 7,171까지 올랐다가 오후 한때 6,992.70까지 밀린 뒤 7,017.91(+0.15%)로 마감. 코스닥은 834.38(-0.23%). 수급은 <b>개인 -1조8,793억, 기관 -364억, 외국인 +2,613억</b>(매체별 잠정치 소폭 차이). 삼성전자 강보합(+0.18%), SK하이닉스 -1.50%.</p>
+      <p><span class="b f">사실</span>업종: 건설 +2.51%, 운송·창고 +2.18%, 기계·장비 +1.06% 강세 / 제약 -1.00%, 화학 -0.62%, 유통 -0.36% 약세. PCB·기판주 랠리와 일부 바이오 상한가가 있었습니다.</p>
+      <p><span class="b v">해석</span>추석 연휴 현금 수요(개인 매도)와 4일 휴장 리스크 회피가 상승폭을 지운 핵심. 건설주 강세는 정부 ‘주거안정플랜’(119만 호) 기대가 반영된 것으로 보입니다.</p>
+    </div>
+    <div class="item">
+      <h3>환율 1,350원대 복귀 — 무엇을 뜻하나</h3>
+      <p><span class="b f">사실</span>원/달러는 1,374.0원 출발 후 1,352.9원까지 내려 1,358.2원 마감(-22.8원). 추석 전 수출업체 네고(달러 매도) 물량과 미·이란 대화 기대가 겹쳤습니다.</p>
+      <p><span class="b e">추정</span>연휴 계절성 매도는 일시적 성격이 강해, 연휴 후 수급이 정상화되면 되돌림(반등) 가능성도 열어둬야 합니다. 방향성은 미·이란 협상과 美 금리가 결정할 것입니다.</p>
+      <div class="impact"><b>투자 포인트</b> — 환노출형 국내상장 미국 ETF는 환율이 1% 내리면 원화 평가액도 약 1% 줄어듭니다. 22일 하루 -1.65%의 환율 하락이 평가액에 반영된 상태입니다.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 청와대 -->
+<section>
+  <h2>청와대 · 대통령 <span class="tag">PRESIDENTIAL OFFICE</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>이재명 대통령 유엔총회 기조연설 — “싸울 필요 없는 평화”</h3>
+      <p><span class="b f">사실</span>22일(현지) 제81차 유엔총회 기조연설에서 ‘한반도 평화공존 3대 청사진’(①서로 존중하는 포용적 평화공존 ②싸울 필요가 없는 안정적 평화공존 ③세계 평화에 기여하는 책임 있는 평화공존)을 제시. 北 핵·미사일 <b>중단 → 축소 → 핵 없는 한반도</b>의 단계적 접근과 북미대화 조속 재개, 남·북·미·중 다자대화를 제안했습니다. 구테흐스 유엔 사무총장은 “한반도 정책을 적극 지지”한다고 밝혔습니다.</p>
+      <div class="impact"><b>시장 영향</b> — 단기 주가 변수는 제한적. 다만 지정학 리스크 완화 기대는 ‘코리아 디스카운트’ 축소 논리에 보탬(남북경협·방산은 방향이 엇갈릴 수 있음).</div>
+    </div>
+    <div class="item">
+      <h3>“강남불패·부동산 투기공화국은 과거 이야기 될 것”</h3>
+      <p><span class="b f">사실</span>대통령은 순방 중 X(옛 트위터)에 정부 주택공급 계획을 공유하며 “반드시 그래야 한다”고 강조. 앞서 청와대 수석보좌관회의(제47차)에서는 “지속적인 변화를 위해 인내하고 대화하며 방식과 과정을 숙고해야 한다”고 말했습니다(검찰개혁 속도 논쟁에 대한 우회적 메시지로 해석).</p>
+      <div class="impact"><b>시장 영향</b> — 주택 투기 억제 기조 재확인. 부동산 자금 → 금융시장 이동이라는 정부 정책 방향과 일관됩니다.</div>
+    </div>
+    <div class="item">
+      <h3>순방 일정: 미국·멕시코 (9/21~27)</h3>
+      <p><span class="b f">사실</span>유엔총회 계기 정상외교 진행 중. 귀국은 27일 예정.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 부처 -->
+<section>
+  <h2>부처별 주요 발표 <span class="tag">MINISTRIES</span></h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>부처</th><th>발표 내용</th><th>시장·생활 영향</th></tr></thead>
+      <tbody>
+        <tr><td>국토교통부</td><td><b>주거안정플랜</b>: 2030년까지 공적주택 119만 호(수도권 92만 호, 77%). 공공임대 89.3만(건설형 35만·매입형 31.3만·전세임대 23만), 공공분양 24.3만. 청년 24만·신혼 33만·고령 5만 호. 장기공공임대 250만 호, 재고 비중 10% 돌파 목표.</td><td>건설주 단기 호재. 단 “70만 호는 기존 계획 재탕” 지적 → 실현성 확인 필요.</td></tr>
+        <tr><td>법무부</td><td>공소청 직제·검사정원법 시행령 <b>수정안 국무회의 통과</b>(9/22). 조직·인력 추가 축소(검사 15~20%, 수사관 약 69% 감축 보도).</td><td>시장 영향 미미. 여권 강경파와의 갈등 봉합 여부가 정치 변수.</td></tr>
+        <tr><td>관세청</td><td><b>9월 1~20일 수출 714억 달러(+78.3%)</b>, 1~20일 기준 역대 최대. 반도체 341억 달러(+259%, 비중 47.8%). 무역흑자 230억 달러. 對중국 +113.8%, 對미국 +118.0%.</td><td>반도체 실적 모멘텀 확인. 다만 반도체 쏠림(절반 가까이)은 업황 반전 시 취약점.</td></tr>
+        <tr><td>국가데이터처</td><td>2025년 사망원인통계: 사망자 36만2,968명(역대 2위), 암 사망 9만203명 첫 9만 돌파, 80세 이상 비중 54.7%. 10~40대 사망원인 1위 자살.</td><td>고령화 가속 → 헬스케어·요양·실버주택 수요 구조적 증가.</td></tr>
+        <tr><td>재정경제부</td><td>유류세 인하 11월 말까지 2개월 연장(휘발유 15%, 경유·부탄 25%). 추석 농축수산물 할인예산 1,490억 원(최대 50%), 19대 성수품 18.5만 톤 공급.</td><td>물가 상방 압력 완화. 세수 감소 요인.</td></tr>
+        <tr><td>공정위·국토부</td><td>대한항공–아시아나 마일리지 통합안 최종 승인 → 통합 대한항공 <b>12월 17일 출범</b> 목표. 아시아나 마일리지 10년간 사용 가능.</td><td>잔여 과제는 조종사 노조 서열 통합(노동쟁의 조정 신청).</td></tr>
+        <tr><td>오늘 발표</td><td>ADB 아시아경제전망(수정) 발표 예정 — 한국 성장률 전망치 확인.</td><td>상향 시 외국인 수급에 우호적.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5. 경제·산업 -->
+<section>
+  <h2>경제 · 산업 <span class="tag">ECONOMY &amp; INDUSTRY</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>반도체 ‘수퍼사이클’ 지속 — 다음 관문은 마이크론 실적</h3>
+      <p><span class="b f">사실</span>9월 20일까지 반도체 수출이 전년 대비 3.6배. 美 마이크론은 23일(현지) 장 마감 후 분기 실적 발표 예정(한국 시간 24일 새벽, 국내 휴장 중).</p>
+      <p><span class="b e">추정</span>휴장 중 실적이 나오므로 결과는 28일(월) 재개장 때 한꺼번에 반영됩니다. HBM 가격·가이던스가 기대에 못 미치면 갭 하락 위험.</p>
+    </div>
+    <div class="item">
+      <h3>삼성전자 노조 ‘노노 갈등’ 격화</h3>
+      <p><span class="b f">사실</span>DS(반도체) 중심 초기업노조가 2027년 임금협상을 단독 교섭으로 가겠다고 선언, DX 중심 동행노조는 전사 공동교섭을 요구하며 반발. 초기업노조 내부 회계 의혹까지 불거졌습니다. 발단은 5월 합의된 ‘반도체 성과 10.5% 특별성과급’의 사업부 간 격차.</p>
+      <div class="impact"><b>시장 영향</b> — 당장 생산 차질 신호는 없음. 파업·교섭 장기화 시 비용·평판 리스크로 확산 가능.</div>
+    </div>
+    <div class="item">
+      <h3>통합 대한항공 12월 출범 ‘산 넘어 산’</h3>
+      <p><span class="b f">사실</span>행정절차는 끝났지만 조종사 서열 통합이 미해결. 통합 후 여객 세계 15위·화물 5위·종합 10위권, 연 시너지 약 3,000억 원 기대.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6. 정치 -->
+<section>
+  <h2>정치 <span class="tag">POLITICS</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>검찰개혁 속도 논쟁 … 여권 내부 균열</h3>
+      <p><span class="b f">사실</span>정부가 공소청 조직을 추가 축소한 수정안을 확정했지만, 유시민 작가가 “대통령이 검찰개혁을 놓고 국민을 속였다”고 비판하는 등 강경파 반발이 이어졌습니다. 대통령의 ‘인내·대화’ 발언이 이 논쟁과 맞물려 주목받고 있습니다.</p>
+      <p><span class="b v">해석</span>여권 내부 갈등이 국정감사 시즌(신한은행 등 금융권 증인 채택 논의)과 겹쳐 입법 속도에 영향을 줄 수 있습니다.</p>
+    </div>
+    <div class="item">
+      <h3>국정감사 앞두고 금융권 긴장</h3>
+      <p><span class="b f">사실</span>산업통상자원위원회 국감에 신한은행 증인 채택이 거론되고 있습니다.</p>
+      <div class="impact"><b>시장 영향</b> — 은행주는 美 금융주 급락과 국감 이슈가 겹쳐 단기 변동성 확대 가능.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 사회 -->
+<section>
+  <h2>사회 <span class="tag">SOCIETY</span></h2>
+  <div class="list">
+    <div class="item">
+      <h3>‘계엄 가담’ 군 지휘부 1심 중형</h3>
+      <p><span class="b f">사실</span>서울중앙지법은 21일 여인형 전 방첩사령관 징역 18년, 이진우 전 수방사령관 15년, 문상호 전 정보사령관 12년, 박안수 전 육군참모총장 10년, 곽종근 전 특전사령관 9년을 선고. 재판부는 비상계엄을 “헌법질서 파괴 목적의 폭동”으로 규정했습니다.</p>
+    </div>
+    <div class="item">
+      <h3>고령화 통계 — 사망자 80세 이상이 절반 넘어</h3>
+      <p><span class="b f">사실</span>하루 평균 994명 사망, 암 사망 9만 명 돌파. 자살 사망은 1만4,144명으로 4.9% 감소했지만 10대만 상승.</p>
+    </div>
+    <div class="item">
+      <h3>추석 민생 — 물가·교통</h3>
+      <p><span class="b f">사실</span>농축수산물 최대 50% 할인(9/30까지, 1인 한도 폐지), 유류세 인하 연장. 연휴 기간 파생상품 야간거래도 23일 18시~24일 06시 휴장.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 일정 -->
+<section>
+  <h2>오늘 · 연휴 중 체크할 일정 <span class="tag">CALENDAR</span></h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>일시(KST)</th><th>이벤트</th><th>왜 중요한가</th></tr></thead>
+      <tbody>
+        <tr><td>9/23(수) 09:00~15:30</td><td>연휴 전 마지막 국내 정규장</td><td>개인 현금화 매물, 4일 휴장 리스크 헤지</td></tr>
+        <tr><td>9/23(수) 중</td><td>ADB 아시아경제전망 수정</td><td>한국 성장률 전망 조정 여부</td></tr>
+        <tr><td>9/23(현지)</td><td>미·이란 2차 협상(뉴욕)</td><td>유가·환율 방향 결정 변수</td></tr>
+        <tr><td>9/24(목) 새벽</td><td>마이크론 분기 실적(예정)</td><td>HBM·메모리 가격 → 삼성전자·SK하이닉스</td></tr>
+        <tr><td>9/24~25</td><td>국내 증시 휴장(추석)</td><td>美 증시는 정상 개장 → 28일 한꺼번에 반영</td></tr>
+        <tr><td>9/27(일)</td><td>대통령 순방 귀국</td><td>정상외교 성과 발표</td></tr>
+        <tr><td>9/28(월)</td><td>국내 증시 재개장</td><td>연휴 중 해외 변수 일괄 반영(갭 주의)</td></tr>
+        <tr><td>9/30(수, 현지)</td><td>美 PCE 물가·GDP 확정치</td><td>연준 추가 인상 여부 판단 재료</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 9. 시나리오 -->
+<section>
+  <h2>연휴 이후 시나리오 <span class="tag">SCENARIOS</span></h2>
+  <div class="scen">
+    <div class="bull"><h3>상승 시나리오</h3><p>미·이란 합의 진전 → 브렌트 $95 하회, 환율 1,340원대. 마이크론 호실적 → 반도체 주도로 코스피 7,200 재도전.</p></div>
+    <div class="base"><h3>기본 시나리오</h3><p>협상은 “진행 중”, 실적은 대체로 예상 부합. 코스피 7,000선 안팎 박스권, 환율 1,350~1,380원 등락.</p></div>
+    <div class="bear"><h3>하락 시나리오</h3><p>협상 결렬·호르무즈 긴장 재발 → 유가 $100+, 환율 1,380원 이상 반등. 美 PCE 강세 → 연준 추가 인상 우려, 고밸류 기술주 조정.</p></div>
+  </div>
+  <p class="note"><span class="b e">추정</span>시나리오는 작성자의 판단이며 확률을 보장하지 않습니다.</p>
+</section>
+
+<!-- 10. 내 포트폴리오 -->
+<section>
+  <h2>내 포트폴리오 · 은퇴 현금흐름 관점 <span class="tag">FOR ME</span></h2>
+  <div class="mine">
+    <ul>
+      <li><b>KODEX 미국배당다우존스 500주</b> — 환노출형이라 22일 환율 -1.65%만큼 원화 평가액이 줄어든 상태. 美 금융주 약세(편입 비중 있음)도 부담. <b>분배금은 달러 기준이므로 장기 현금흐름 자체는 영향 적음.</b> 연휴 전 매도·추가매수 모두 서두를 이유 없음.</li>
+      <li><b>한·미 금리 인상 사이클</b> — 배당주·리츠 가격엔 역풍, 반대로 완충층(단기채·MMF·파킹형 ETF)의 이자는 올라갑니다. 3층 구조(코어·인컴·완충) 중 <b>완충층 금리 재점검</b> 적기.</li>
+      <li><b>커버드콜 20~30% 한도</b> — 나스닥 최고치 랠리 구간에선 커버드콜이 상승분을 제한합니다. 비중을 늘리기보다 한도 내 유지가 원칙에 부합.</li>
+      <li><b>‘생산적금융 ISA’(세제개편안)</b> — 국내 주식·주식형 펀드 이자·배당 전액 비과세, 연 2,000만·총 2억 원 한도. 단 <b>직전 3년 중 한 번이라도 금융소득종합과세 대상이면 가입 불가</b>. 상가 매각 후 금융소득이 연 2,000만 원을 넘기 전에 가입 가능 여부를 확인할 가치가 큽니다. <span class="b e">추정</span>국회 통과·시행 시기는 미확정 → 정기국회 결과 확인 필요.</li>
+      <li><b>상가 매각 타이밍</b> — 기준금리 3.00%로 인상 국면이면 상가 요구수익률이 오르고 매수자 대출 부담도 커져 매각가에 불리합니다. 정부 주택공급 정책은 주거용 중심이라 상가에는 직접 영향이 적습니다. 3분기 상업용부동산 임대동향(한국부동산원, 10월 말 발표 예상)을 확인하세요.</li>
+      <li><b>건강보험료</b> — 지역가입자는 이자·배당(연 1,000만 원 초과분 전액 반영)과 재산이 보험료에 반영됩니다. ISA 내부 수익은 건보료 산정 대상이 아니므로 ISA 활용이 건보료 방어에도 유리합니다.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 11. 체크리스트 -->
+<section>
+  <h2>오늘 할 일 체크리스트 <span class="tag">TO-DO</span></h2>
+  <ul class="check">
+    <li>연휴 4일 동안 필요한 현금 확인 — 오늘 매도해도 결제일(T+2)은 연휴 뒤로 밀립니다.</li>
+    <li>보유 ETF 손절·추가매수 기준 재확인 — 기준 없는 매수 금지, 연휴 전 추격매수 자제.</li>
+    <li>MMF·파킹형 ETF·단기채 금리 비교(한·미 금리 인상 반영 여부).</li>
+    <li>마이크론 실적·미·이란 협상 결과를 24~27일 중 확인하고 28일 대응 메모 작성.</li>
+    <li>생산적금융 ISA 입법 진행 상황과 본인 가입 요건(종합과세 이력) 메모.</li>
+    <li>상가: 임차인 연휴 영업·관리비 정산 일정 확인.</li>
+  </ul>
+</section>
+
+<div class="src">
+  <strong>주요 출처</strong>
+  <ul>
+    <li><a href="https://view.asiae.co.kr/article/2026092215331083313">아시아경제 — 코스피 7,017.91 마감</a></li>
+    <li><a href="https://www.etoday.co.kr/news/view/2628715">이투데이 — 코스피 강보합·코스닥 하락</a></li>
+    <li><a href="https://www.etoday.co.kr/news/view/2628696">이투데이 — 환율 22.8원 급락</a></li>
+    <li><a href="https://view.asiae.co.kr/article/2026092216553626491">아시아경제 — 환율 급락 배경</a></li>
+    <li><a href="https://www.etoday.co.kr/news/view/2628843">이투데이 — 뉴욕증시 마감</a></li>
+    <li><a href="https://biz.sbs.co.kr/article/20000336408">SBS Biz — 나스닥 또 최고치</a></li>
+    <li><a href="https://www.fxstreet.com/news/dow-jones-industrial-average-drops-from-a-weekly-high-as-bank-shares-slide-202609221609">FXStreet — 은행주 약세</a></li>
+    <li><a href="https://www.newspim.com/news/view/20260923000052">뉴스핌 — 유가·금 동향</a></li>
+    <li><a href="https://www.sedaily.com/article/20094278">서울경제 — 미·이란 직접회담</a></li>
+    <li><a href="https://www.cnbc.com/2026/09/16/fed-rate-decision-september-2026.html">CNBC — 연준 9월 금리 결정</a></li>
+    <li><a href="https://www.fntimes.com/html/view.php?ud=202608271107018117179ad43907_18">한국금융신문 — 한은 3.00% 인상</a></li>
+    <li><a href="https://www.newdaily.co.kr/site/data/html/2026/09/23/2026092300013.html">뉴데일리 — 대통령 유엔 기조연설</a></li>
+    <li><a href="https://www.news1.kr/politics/president/6298172">뉴스1 — “강남불패 과거 이야기”</a></li>
+    <li><a href="https://www.hankookilbo.com/news/article/A2026092110040005442">한국일보 — 주거안정플랜 119만 호</a></li>
+    <li><a href="https://www.alphabiz.co.kr/news/articleView.html?idxno=189670">알파경제 — 119만 호 중 70만 호 재탕 지적</a></li>
+    <li><a href="https://www.fnnews.com/news/202609221042371907">파이낸셜뉴스 — 공소청 조직 축소</a></li>
+    <li><a href="https://www.dailian.co.kr/news/view/1692836/9%EC%9B%94-120%EC%9D%BC-%EC%88%98%EC%B6%9C-714%EC%96%B5-%EB%8B%AC%EB%9F%AC%EB%A1%9C-2026">데일리안 — 9월 1~20일 수출</a></li>
+    <li><a href="https://www.korea.kr/briefing/policyBriefingView.do?newsId=156782877">정책브리핑 — 2025 사망원인통계</a></li>
+    <li><a href="https://www.hankookilbo.com/news/article/A2026091810110005264">한국일보 — 유류세 인하 연장</a></li>
+    <li><a href="https://www.mt.co.kr/industry/2026/09/16/2026091519554122771">머니투데이 — 메가캐리어 출범 임박</a></li>
+    <li><a href="https://biz.heraldcorp.com/article/10877188">헤럴드경제 — 삼성전자 노노 갈등</a></li>
+    <li><a href="https://www.segye.com/newsView/20260921516318">세계일보 — 계엄 가담 군 지휘부 선고</a></li>
+    <li><a href="https://www.newspim.com/news/view/20260918000845">뉴스핌 — 추석 연휴 휴장</a></li>
+    <li><a href="https://www.fntimes.com/html/view.php?ud=202608032211137534179ad43907_18">한국금융신문 — 생산적금융 ISA</a></li>
+  </ul>
+</div>
+
+<footer>본 브리핑은 공개 보도를 요약·해석한 참고자료이며 투자 권유가 아닙니다. 수치는 발행 시점 보도 기준이며 매체별로 다를 수 있으니 매매 전 증권사 시세로 확인하세요. 세법·건보료 내용은 개정 가능성이 있어 세무사·국민건강보험공단 확인을 권합니다.</footer>
+
+</div>
