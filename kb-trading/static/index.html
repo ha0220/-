@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KB 주식 매매</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>KB 주식 매매</h1>
+    <span id="modeBadge" class="badge">…</span>
+    <span id="tradeBadge" class="badge hidden"></span>
+    <span class="spacer"></span>
+    <span id="clock" class="muted"></span>
+    <span id="session" class="badge subtle"></span>
+  </header>
+
+  <div id="banner" class="banner hidden" role="status"></div>
+
+  <main class="layout">
+    <section class="col-main">
+      <form id="searchForm" class="card search" autocomplete="off">
+        <input id="codeInput" list="stockList" placeholder="종목명 또는 종목코드 (예: 삼성전자, 005930)" aria-label="종목 검색">
+        <datalist id="stockList"></datalist>
+        <button type="submit" class="primary">조회</button>
+        <button type="button" id="watchBtn" title="관심종목 추가/삭제">☆</button>
+      </form>
+      <div id="watchlist" class="chips"></div>
+
+      <section class="card" id="quoteCard">
+        <div class="quote-head">
+          <div>
+            <div id="qName" class="q-name">종목을 조회하세요</div>
+            <div id="qSub" class="muted"></div>
+          </div>
+          <div class="q-price-wrap">
+            <div id="qPrice" class="q-price">-</div>
+            <div id="qChange" class="q-change"></div>
+          </div>
+        </div>
+        <dl id="qStats" class="stats"></dl>
+      </section>
+
+      <section class="card">
+        <h2>호가 <span id="obTotals" class="muted"></span></h2>
+        <table id="orderbook" class="orderbook"><tbody></tbody></table>
+      </section>
+    </section>
+
+    <aside class="col-side">
+      <section class="card ticket" id="ticket">
+        <div class="tabs side-tabs" role="tablist">
+          <button type="button" id="tabBuy" class="tab buy active" role="tab">매수</button>
+          <button type="button" id="tabSell" class="tab sell" role="tab">매도</button>
+        </div>
+        <form id="orderForm" autocomplete="off">
+          <div class="field"><label>종목</label><div id="oCode" class="static">-</div></div>
+          <div class="field">
+            <label for="oType">주문유형</label>
+            <select id="oType">
+              <option value="limit">지정가</option>
+              <option value="market">시장가</option>
+              <option value="best">최유리지정가</option>
+              <option value="priority">최우선지정가</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="oPrice">가격(원)</label>
+            <div class="stepper">
+              <button type="button" id="pDown" aria-label="가격 내리기">−</button>
+              <input id="oPrice" type="number" inputmode="numeric" min="0" step="1">
+              <button type="button" id="pUp" aria-label="가격 올리기">+</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="oQty">수량(주)</label>
+            <input id="oQty" type="number" inputmode="numeric" min="1" step="1" value="1">
+            <div class="quick">
+              <button type="button" data-q="1">+1</button><button type="button" data-q="10">+10</button>
+              <button type="button" data-q="100">+100</button><button type="button" id="qMax">최대</button>
+            </div>
+          </div>
+          <details class="adv">
+            <summary>고급 옵션</summary>
+            <div class="field"><label for="oSession">거래시간</label>
+              <select id="oSession">
+                <option value="1">정규장</option>
+                <option value="2">장개시전 시간외종가</option>
+                <option value="3">장종료후 시간외종가</option>
+              </select></div>
+            <div class="field"><label for="oSor">거래소</label>
+              <select id="oSor">
+                <option value="">기본</option><option value="K">KRX</option>
+                <option value="N">NXT</option><option value="S">SOR(최선집행)</option>
+              </select></div>
+          </details>
+          <dl class="summary">
+            <div><dt>예상 주문금액</dt><dd id="oAmount">0원</dd></div>
+            <div><dt id="oAvailLabel">주문가능금액</dt><dd id="oAvail">-</dd></div>
+          </dl>
+          <button type="submit" id="submitBtn" class="submit buy">매수 주문</button>
+        </form>
+      </section>
+    </aside>
+
+    <section class="col-bottom card">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" data-pane="paneOrders">주문 내역</button>
+        <button type="button" class="tab" data-pane="panePortfolio">보유 종목</button>
+        <span class="spacer"></span>
+        <button type="button" id="refreshAll" title="새로고침">↻</button>
+      </div>
+      <div id="paneOrders" class="pane">
+        <div class="table-wrap"><table class="grid">
+          <thead><tr><th>시각</th><th>구분</th><th>종목</th><th class="num">주문가</th><th class="num">주문수량</th>
+            <th class="num">체결수량</th><th class="num">미체결</th><th>상태</th><th></th></tr></thead>
+          <tbody id="ordersBody"></tbody></table></div>
+        <p id="ordersEmpty" class="muted empty hidden">오늘 주문 내역이 없습니다.</p>
+      </div>
+      <div id="panePortfolio" class="pane hidden">
+        <div id="pfSummary" class="pf-summary"></div>
+        <div class="table-wrap"><table class="grid">
+          <thead><tr><th>종목</th><th class="num">보유</th><th class="num">매입평균</th><th class="num">현재가</th>
+            <th class="num">평가금액</th><th class="num">평가손익</th><th class="num">수익률</th></tr></thead>
+          <tbody id="pfBody"></tbody></table></div>
+        <p id="pfEmpty" class="muted empty hidden">보유 종목이 없습니다.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="confirmDlg">
+    <form method="dialog" id="confirmForm">
+      <h3 id="cTitle">주문 확인</h3>
+      <div id="cBody" class="confirm-body"></div>
+      <p id="cWarn" class="warn hidden"></p>
+      <menu>
+        <button value="cancel" type="button" id="cNo">취소</button>
+        <button value="ok" type="button" id="cYes" class="primary">주문 전송</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="amendDlg">
+    <form method="dialog" id="amendForm">
+      <h3>주문 정정 (가격)</h3>
+      <div id="aInfo" class="confirm-body"></div>
+      <div class="field"><label for="aPrice">정정 가격(원)</label><input id="aPrice" type="number" min="1" step="1"></div>
+      <menu>
+        <button type="button" id="aNo">닫기</button>
+        <button type="button" id="aYes" class="primary">정정 전송</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="alert"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
