@@ -65,9 +65,9 @@ const TAX = {
 };
 
 // 알림 시점(일 전) 기본값. norm()이 load()에서 먼저 실행되므로 그보다 위에 선언해야 한다.
-const DEFAULT_STAGES = [90, 60, 30, 21, 14, 7, 3, 1];
-const STAGES_VER = 7;   // 기본 시점 목록을 바꿀 때 올리고, 직전 버전의 기본값을 PREV_DEFAULTS에 추가한다
-const PREV_DEFAULTS = {0: "90,60", 2: "90,60,30", 3: "90,60,30,7", 4: "90,60,30,7,1", 5: "90,60,30,7,3,1", 6: "90,60,30,14,7,3,1"};   // 버전별 '이전 기본값'(0 = 버전 표시가 없던 때)
+const DEFAULT_STAGES = [90, 60, 45, 30, 21, 14, 7, 3, 1];
+const STAGES_VER = 8;   // 기본 시점 목록을 바꿀 때 올리고, 직전 버전의 기본값을 PREV_DEFAULTS에 추가한다
+const PREV_DEFAULTS = {0: "90,60", 2: "90,60,30", 3: "90,60,30,7", 4: "90,60,30,7,1", 5: "90,60,30,7,3,1", 6: "90,60,30,14,7,3,1", 7: "90,60,30,21,14,7,3,1"};   // 버전별 '이전 기본값'(0 = 버전 표시가 없던 때)
 let S = load();
 let tab = "dash";
 function load(){ let r = null; try{ r = JSON.parse(localStorage.getItem(STORE)); }catch(e){} return norm(r); }
