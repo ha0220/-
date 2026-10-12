@@ -66,7 +66,8 @@ const TAX = {
 
 let S = load();
 let tab = "dash";
-function load(){ try{ const r = JSON.parse(localStorage.getItem(STORE)); if(r && r.units) return r; }catch(e){} return {units:[], payments:{}, sale:{}}; }
+function load(){ let r = null; try{ r = JSON.parse(localStorage.getItem(STORE)); }catch(e){} return norm(r); }
+function norm(r){ r = (r && Array.isArray(r.units)) ? r : {}; return {units:r.units||[], payments:r.payments||{}, sale:r.sale||{}, alerts:r.alerts||{}, settings:Object.assign({alertDays:90}, r.settings)}; }
 function save(){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(e){} }
 
 /* ---------- 유틸 ---------- */
@@ -90,7 +91,10 @@ const rented = () => S.units.filter(u => u.status === "임대");
 
 /* ---------- 탭 ---------- */
 const TABS = [["dash","대시보드"],["units","호실·계약"],["pay","수금"],["sale","매각 시뮬"],["data","백업"]];
-function renderNav(){ $("#nav").innerHTML = TABS.map(([k,l]) => `<button class="${k===tab?"on":""}" data-tab="${k}">${l}</button>`).join(""); }
+function renderNav(){
+  const pend = dueSoon().filter(x => !x.sent).length;
+  $("#nav").innerHTML = TABS.map(([k,l]) => `<button class="${k===tab?"on":""}" data-tab="${k}">${l}${k==="dash"&&pend?` <span class="tag t-bad">${pend}</span>`:""}</button>`).join("");
+}
 function render(){ renderNav(); ({dash:rDash,units:rUnits,pay:rPay,sale:rSale,data:rData})[tab](); }
 
 /* ---------- 대시보드 ---------- */
@@ -121,6 +125,48 @@ function overdueList(){
   }
   return out;
 }
+/* ---------- 만료 알림 (카카오톡 공유) ---------- */
+const alertDays = () => Math.max(1, Math.min(365, Math.round(num(S.settings.alertDays)) || 90));
+const akey = (u,d) => `${u.id}|${u.end}|${d}`;
+function dueSoon(){
+  const d = alertDays();
+  return rented().map(u => ({u, i: noticeInfo(u)})).filter(x => x.i && x.i.left >= 0 && x.i.left <= d)
+    .sort((a,b) => a.i.left-b.i.left).map(x => ({...x, sent: S.alerts[akey(x.u,d)] || ""}));
+}
+function alertText(items){
+  return `[상가 임대관리] 계약 만료 ${alertDays()}일 이내 알림 (${ymd(today())} 기준)\n` + items.map(({u,i}) =>
+    `\n• ${u.name} ${u.tenant||""}\n  만료 ${u.end} (D-${i.left})\n  ${i.msg}\n  증액 상한(5%) 월세 ${won(num(u.rent)*(1+TAX.rentCap))}`).join("\n")
+    + "\n\n※ 참고용입니다. 갱신·증액은 계약서와 법률 전문가 확인이 필요합니다.";
+}
+async function copyText(text){ await navigator.clipboard.writeText(text); }
+async function sendAlert(){
+  const items = dueSoon().filter(x => !x.sent); if(!items.length) return;
+  const text = alertText(items);
+  try{
+    if(navigator.share) await navigator.share({text});
+    else { await copyText(text); alert("메시지를 복사했습니다. 카카오톡 '나와의 채팅'에 붙여넣어 보내세요."); }
+  }catch(e){
+    if(e && e.name === "AbortError") return;           // 공유창을 닫은 경우: 발송 처리하지 않음
+    try{ await copyText(text); alert("메시지를 복사했습니다. 카카오톡 '나와의 채팅'에 붙여넣어 보내세요."); }
+    catch(_){ prompt("아래 내용을 복사해 카카오톡으로 보내세요.", text); return; }
+  }
+  const d = alertDays(); items.forEach(x => S.alerts[akey(x.u,d)] = ymd(new Date())); save(); render();
+}
+async function copyAlert(){
+  const items = dueSoon(); if(!items.length) return;
+  try{ await copyText(alertText(items)); alert("메시지를 복사했습니다."); }catch(e){ prompt("아래 내용을 복사하세요.", alertText(items)); }
+}
+function alertCard(){
+  const d = alertDays(), L = dueSoon(), pend = L.filter(x => !x.sent);
+  const head = `<div class="row" style="justify-content:space-between"><b>계약 만료 ${d}일 이내 알림</b><label style="display:flex;gap:6px;align-items:center">기준 <input id="alertDays" type="number" min="1" max="365" value="${d}" style="width:72px">일</label></div>`;
+  if(!L.length) return `<div class="card" style="margin-bottom:16px">${head}<div class="hint">${d}일 이내 만료되는 계약이 없습니다.</div></div>`;
+  return `<div class="card" style="margin-bottom:16px;border-color:${pend.length?"var(--bad)":"var(--line)"}">${head}
+  <div class="tablewrap"><table><tr><th>호실</th><th>임차인</th><th>만료일</th><th>카카오톡</th></tr>
+  ${L.map(({u,i,sent})=>`<tr><td>${esc(u.name)}</td><td>${esc(u.tenant)}</td><td>${esc(u.end)} <span class="hint">D-${i.left}</span></td><td>${sent?`<span class="tag t-ok">발송 ${esc(sent)}</span>`:`<span class="tag t-bad">미발송</span>`}</td></tr>`).join("")}</table></div>
+  <div class="row" style="margin-top:10px">${pend.length?`<button class="btn" data-act="sendalert">카카오톡으로 보내기 (${pend.length}건)</button>`:""}<button class="btn ghost" data-act="copyalert">메시지 복사</button></div>
+  <div class="hint">웹페이지는 닫혀 있으면 알림을 보낼 수 없습니다. 앱을 열면 이 카드가 표시되며, 휴대폰에서 누르면 공유창이 열립니다. 카카오톡 '나와의 채팅'을 선택해 보내세요.</div></div>`;
+}
+
 function rDash(){
   const n = S.units.length, occ = rented().length, vac = n - occ;
   const inc = rented().reduce((s,u)=>s+monthly(u),0);
@@ -129,6 +175,7 @@ function rDash(){
   const exp = rented().map(u => ({u, i: noticeInfo(u)})).filter(x => x.i).sort((a,b)=>a.i.left-b.i.left);
   const soon = exp.filter(x => x.i.left <= 365);
   $("#main").innerHTML = n===0 ? `<div class="card empty">등록된 호실이 없습니다.<br><br><button class="btn" data-act="add">호실 추가</button> <button class="btn ghost" data-act="sample">예시 데이터 불러오기</button></div>` : `
+  ${alertCard()}
   <div class="grid">
     <div class="card kpi"><div class="l">호실 / 임대 중 / 공실</div><div class="v">${n} / ${occ} / ${vac}</div></div>
     <div class="card kpi"><div class="l">공실률</div><div class="v">${n?Math.round(vac/n*100):0}%</div></div>
@@ -244,14 +291,17 @@ document.addEventListener("click", e => {
   else if(a==="edit") openForm(u);
   else if(a==="del"){ if(confirm(`'${u.name}' 호실을 삭제할까요? 수금 기록도 함께 사라집니다.`)){ S.units = S.units.filter(x=>x!==u); Object.values(S.payments).forEach(m=>delete m[u.id]); save(); render(); } }
   else if(a==="sample") loadSample();
+  else if(a==="sendalert") sendAlert();
+  else if(a==="copyalert") copyAlert();
   else if(a==="export"){ const b = new Blob([JSON.stringify(S,null,1)],{type:"application/json"}), l = document.createElement("a"); l.href = URL.createObjectURL(b); l.download = `rental-${ymd(new Date())}.json`; l.click(); }
-  else if(a==="reset"){ if(confirm("모든 데이터를 삭제합니다. 계속할까요?")){ S = {units:[],payments:{},sale:{}}; save(); render(); } }
+  else if(a==="reset"){ if(confirm("모든 데이터를 삭제합니다. 계속할까요?")){ S = norm(null); save(); render(); } }
 });
 document.addEventListener("change", e => {
   const t = e.target;
   if(t.id==="pm"){ payMonth = t.value || payMonth; rPay(); }
+  else if(t.id==="alertDays"){ S.settings.alertDays = Math.max(1, Math.min(365, Math.round(num(t.value)) || 90)); save(); render(); }
   else if(t.dataset.pay){ (S.payments[payMonth] ||= {})[t.dataset.pay] = {paid:t.checked, date:t.checked?ymd(new Date()):""}; save(); rPay(); }
-  else if(t.id==="imp"){ const r = new FileReader(); r.onload = () => { try{ const d = JSON.parse(r.result); if(!Array.isArray(d.units)) throw 0; if(confirm("현재 데이터를 불러온 파일로 교체할까요?")){ S = {units:d.units, payments:d.payments||{}, sale:d.sale||{}}; save(); tab="dash"; render(); } }catch(_){ alert("올바른 백업 파일이 아닙니다."); } }; r.readAsText(t.files[0]); }
+  else if(t.id==="imp"){ const r = new FileReader(); r.onload = () => { try{ const d = JSON.parse(r.result); if(!Array.isArray(d.units)) throw 0; if(confirm("현재 데이터를 불러온 파일로 교체할까요?")){ S = norm(d); save(); tab="dash"; render(); } }catch(_){ alert("올바른 백업 파일이 아닙니다."); } }; r.readAsText(t.files[0]); }
 });
 document.addEventListener("input", e => { const k = e.target.dataset.sale; if(k){ S.sale[k] = e.target.value; save(); calcSale(); } });
 
