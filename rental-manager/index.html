@@ -59,7 +59,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 const STORE = "rental-manager-v1";
 // 세율·공제는 바뀔 수 있으므로 한 곳에 모아 둠. 신고 전 국세청/세무사로 반드시 확인.
 const TAX = {
-  asOf: "2026-10 입력 기준(미검증)",
+  asOf: "2026-10-12 2차 자료 교차확인(법령 원문 미확인)",
   brackets: [[14e6,.06,0],[50e6,.15,1.26e6],[88e6,.24,5.76e6],[150e6,.35,15.44e6],[300e6,.38,19.94e6],[500e6,.40,25.94e6],[1e9,.42,35.94e6],[Infinity,.45,65.94e6]],
   basic: 2.5e6, localRate: .10, vat: .10, rentCap: .05
 };
@@ -135,7 +135,7 @@ function dueSoon(){
 }
 function alertText(items){
   return `[상가 임대관리] 계약 만료 ${alertDays()}일 이내 알림 (${ymd(today())} 기준)\n` + items.map(({u,i}) =>
-    `\n• ${u.name} ${u.tenant||""}\n  만료 ${u.end} (D-${i.left})\n  ${i.msg}\n  증액 상한(5%) 월세 ${won(num(u.rent)*(1+TAX.rentCap))}`).join("\n")
+    `\n• ${u.name} ${u.tenant||""}\n  만료 ${u.end} (D-${i.left})\n  ${i.msg}\n  증액 상한(5%) 월세 ${won(num(u.rent)*(1+TAX.rentCap))} (환산보증금 ${won(num(u.deposit)+num(u.rent)*100)}, 기준액 이하일 때만 적용)`).join("\n")
     + "\n\n※ 참고용입니다. 갱신·증액은 계약서와 법률 전문가 확인이 필요합니다.";
 }
 async function copyText(text){ await navigator.clipboard.writeText(text); }
@@ -187,7 +187,7 @@ function rDash(){
   <h2>계약 만료 일정 (1년 이내)</h2>
   ${soon.length ? `<div class="card tablewrap"><table><tr><th>호실</th><th>임차인</th><th>만료일</th><th>상태</th><th>안내</th><th class="n">증액 상한(5%) 월세</th></tr>
   ${soon.map(({u,i})=>`<tr><td>${esc(u.name)}</td><td>${esc(u.tenant)}</td><td>${esc(u.end)}<div class="hint">D${i.left>=0?"-":"+"}${Math.abs(i.left)}</div></td><td><span class="tag ${i.cls}">${i.tag}</span></td><td>${esc(i.msg)}</td><td class="n">${won(num(u.rent)*(1+TAX.rentCap))}</td></tr>`).join("")}</table></div>` : `<div class="card empty">1년 내 만료되는 계약이 없습니다.</div>`}
-  <div class="note">상가건물 임대차보호법 기준(참고용): 임대인이 계약 만료 6개월~1개월 전에 갱신거절·조건변경 통지를 하지 않으면 같은 조건으로 갱신된 것으로 봅니다. 임차인의 갱신요구권은 최초 계약부터 10년까지, 증액 상한은 5%입니다. 환산보증금 범위 등 적용 여부는 계약별로 법률 전문가에게 확인하세요.</div>
+  <div class="note">상가건물 임대차보호법 기준(참고용): 임대인이 계약 만료 6개월~1개월 전에 갱신거절·조건변경 통지를 하지 않으면 같은 조건으로 갱신된 것으로 봅니다. 임차인의 갱신요구권은 최초 계약부터 10년까지, 증액 상한은 5%입니다. 다만 환산보증금(보증금 + 월세×100)이 지역별 기준액(서울 9억 등)을 넘으면 묵시적 갱신 규정과 5% 상한은 적용되지 않는 것으로 알려져 있습니다. 계약별 적용 여부는 법률 전문가에게 확인하세요.</div>
   ${od.length ? `<h2>연체·미수</h2><div class="card tablewrap"><table><tr><th>월</th><th>호실</th><th>임차인</th><th class="n">금액(부가세 포함)</th><th class="n">경과</th></tr>${od.map(o=>`<tr><td>${o.key}</td><td>${esc(o.u.name)}</td><td>${esc(o.u.tenant)}</td><td class="n">${won(o.amt)}</td><td class="n">${o.days}일</td></tr>`).join("")}</table></div>`:""}`;
 }
 
@@ -234,12 +234,12 @@ function rPay(){
 }
 
 /* ---------- 매각 시뮬 ---------- */
-function calcTax(g){ // g: 양도차익
+function calcTax(g, noLT){ // g: 양도차익, noLT: 장기보유특별공제 폐지 시나리오
   const out = {gain:g};
   const buy = pd(S.sale.buyDate), sell = pd(S.sale.sellDate);
   let years = 0; if(buy && sell){ years = sell.getFullYear()-buy.getFullYear(); if(addMonths(buy,years*12) > sell) years--; years = Math.max(0,years); }
   out.years = years;
-  out.ltRate = years>=3 ? Math.min(.30, years*.02) : 0;
+  out.ltRate = (!noLT && years>=3) ? Math.min(.30, years*.02) : 0;
   out.lt = Math.max(0,g) * out.ltRate;
   out.base = Math.max(0, g - out.lt - TAX.basic);
   let tax = 0; for(const [cap,r,ded] of TAX.brackets){ if(out.base <= cap){ tax = out.base*r - ded; break; } }
@@ -252,7 +252,7 @@ function rSale(){
   $("#main").innerHTML = `<div class="card"><div class="form">${SALE_IN.map(([k,l,t])=>`<div><label>${l}<input data-sale="${k}" type="${t}" value="${esc(v[k])}"></label></div>`).join("")}</div>
   <div class="hint" style="margin-top:6px">현재 등록된 보증금 합계: ${won(dep)}</div></div>
   <div id="saleRes"></div>
-  <div class="note">단순 추정입니다. 일반 건물·토지 양도, 단일 자산, 기본세율, 장기보유특별공제(3년 이상 보유 시 연 2%, 최대 30%) 가정이며 기준: ${TAX.asOf}. 실제 세액은 취득 시기, 토지·건물 구분, 보유 중 감가상각·필요경비 증빙, 다른 양도소득 합산, 부가가치세(건물분 10%, 포괄양수도 시 면제 여부), 신고 기한 등에 따라 달라집니다. 신고 전 세무사 확인이 필요합니다.</div>`;
+  <div class="note">단순 추정입니다. 일반 건물·토지 양도, 단일 자산, 기본세율, 장기보유특별공제(3년 이상 보유 시 연 2%, 최대 30%) 가정이며 기준: ${TAX.asOf}. 세율표(6~45%), 기본공제 250만원, 지방소득세 10%는 여러 2차 자료에서 일치함을 확인했습니다. 실제 세액은 취득 시기, 토지·건물 구분, 보유 중 감가상각·필요경비 증빙, 다른 양도소득 합산, 부가가치세(건물분 10%, 포괄양수도 시 면제 여부), 신고 기한 등에 따라 달라집니다. 신고 전 세무사 확인이 필요합니다.</div>`;
   calcSale();
 }
 function calcSale(){
@@ -271,7 +271,12 @@ function calcSale(){
   <tr><td>직접 반환 보증금</td><td>-${won(num(v.deposit))}</td></tr>
   <tr><td>대출 상환</td><td>-${won(num(v.loan))}</td></tr>
   <tr class="tot"><td>세후 순현금 유입 (추정)</td><td style="color:${net>=0?"var(--ok)":"var(--bad)"}">${won(net)} (${big(net)})</td></tr></table></div>
-  <div class="hint" style="margin-top:6px">참고: 양도가의 ${(t.total/num(v.price)*100).toFixed(1)}%가 세금으로 계산됨. 양도가를 ±10% 바꿔 최악·최선 시나리오도 확인하세요.</div>`;
+  <div class="hint" style="margin-top:6px">참고: 양도가의 ${(t.total/num(v.price)*100).toFixed(1)}%가 세금으로 계산됨. 양도가를 ±10% 바꿔 최악·최선 시나리오도 확인하세요.</div>
+  ${t.lt > 0 ? (() => { const z = calcTax(gain, true), net0 = num(v.price) - z.total - num(v.deposit) - num(v.loan); return `<div class="card" style="margin-top:12px;border-color:var(--warn)"><b>시나리오: 장기보유특별공제가 폐지될 경우</b>
+  <table class="res" style="margin-top:6px"><tr><td>세금 합계</td><td>${won(z.total)}</td></tr>
+  <tr><td>현행 대비 추가 세금</td><td style="color:var(--bad)">+${won(z.total - t.total)}</td></tr>
+  <tr class="tot"><td>세후 순현금 유입</td><td>${won(net0)} (${big(net0)})</td></tr></table>
+  <div class="hint">토지·상가 등 비주택 자산의 보유기간별 공제를 없애는 소득세법 개정안이 2026년 4월 발의되었고 시행일은 2027-01-01로 보도되었습니다. 2026-10 현재 확정 여부는 확인하지 못했습니다(국회 의안정보시스템 확인 필요). 양도일이 시행일 이후가 되면 이 시나리오가 실제 세액에 가까워질 수 있습니다.</div></div>`; })() : ""}`;
 }
 
 /* ---------- 백업 ---------- */
