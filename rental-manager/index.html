@@ -64,6 +64,9 @@ const TAX = {
   basic: 2.5e6, localRate: .10, vat: .10, rentCap: .05
 };
 
+// 알림 시점(일 전) 기본값. norm()이 load()에서 먼저 실행되므로 그보다 위에 선언해야 한다.
+const DEFAULT_STAGES = [90, 60, 30];
+const STAGES_VER = 2;   // 기본 시점 목록을 바꿀 때 올린다
 let S = load();
 let tab = "dash";
 function load(){ let r = null; try{ r = JSON.parse(localStorage.getItem(STORE)); }catch(e){} return norm(r); }
@@ -73,7 +76,10 @@ function norm(r){
   // 이전 버전의 단일 기준(alertDays)을 알림 시점 목록으로 이전
   // (num 등 유틸은 이 함수보다 뒤에 정의되므로 여기서는 Number만 사용)
   const old = Number(st.alertDays);
-  if(!Array.isArray(st.alertStages)) st.alertStages = (old && old !== 90) ? [old] : [90, 60];
+  if(!Array.isArray(st.alertStages)) st.alertStages = (old && old !== 90) ? [old] : DEFAULT_STAGES.slice();
+  // 이전 기본값(90, 60)을 그대로 쓰던 경우에만 새 기본값(30일 추가)으로 올린다. 직접 바꾼 목록은 건드리지 않는다.
+  else if(st.stagesVer !== STAGES_VER && st.alertStages.join() === "90,60") st.alertStages = DEFAULT_STAGES.slice();
+  st.stagesVer = STAGES_VER;
   delete st.alertDays;
   return {units:r.units||[], payments:r.payments||{}, sale:r.sale||{}, alerts:r.alerts||{}, settings:st};
 }
@@ -136,7 +142,6 @@ function overdueList(){
 }
 /* ---------- 만료 알림 (카카오톡 공유) ---------- */
 // 알림 시점(일 전) 목록. 계약마다 현재 남은 일수가 속한 가장 가까운 시점 하나만 알림 대상이 된다.
-const DEFAULT_STAGES = [90, 60];
 function stages(){
   const a = [...new Set((S.settings.alertStages || []).map(n => Math.round(num(n))).filter(n => n >= 1 && n <= 365))].sort((x,y) => y-x);
   return a.length ? a : DEFAULT_STAGES;
