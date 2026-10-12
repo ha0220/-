@@ -65,8 +65,9 @@ const TAX = {
 };
 
 // 알림 시점(일 전) 기본값. norm()이 load()에서 먼저 실행되므로 그보다 위에 선언해야 한다.
-const DEFAULT_STAGES = [90, 60, 30];
-const STAGES_VER = 2;   // 기본 시점 목록을 바꿀 때 올린다
+const DEFAULT_STAGES = [90, 60, 30, 7];
+const STAGES_VER = 3;   // 기본 시점 목록을 바꿀 때 올리고, 직전 버전의 기본값을 PREV_DEFAULTS에 추가한다
+const PREV_DEFAULTS = {0: "90,60", 2: "90,60,30"};   // 버전별 '이전 기본값'(0 = 버전 표시가 없던 때)
 let S = load();
 let tab = "dash";
 function load(){ let r = null; try{ r = JSON.parse(localStorage.getItem(STORE)); }catch(e){} return norm(r); }
@@ -77,8 +78,8 @@ function norm(r){
   // (num 등 유틸은 이 함수보다 뒤에 정의되므로 여기서는 Number만 사용)
   const old = Number(st.alertDays);
   if(!Array.isArray(st.alertStages)) st.alertStages = (old && old !== 90) ? [old] : DEFAULT_STAGES.slice();
-  // 이전 기본값(90, 60)을 그대로 쓰던 경우에만 새 기본값(30일 추가)으로 올린다. 직접 바꾼 목록은 건드리지 않는다.
-  else if(st.stagesVer !== STAGES_VER && st.alertStages.join() === "90,60") st.alertStages = DEFAULT_STAGES.slice();
+  // 그 시점의 기본값을 그대로 쓰던 경우에만 새 기본값으로 올린다. 직접 바꾼 목록은 건드리지 않는다.
+  else if(st.stagesVer !== STAGES_VER && st.alertStages.join() === PREV_DEFAULTS[st.stagesVer || 0]) st.alertStages = DEFAULT_STAGES.slice();
   st.stagesVer = STAGES_VER;
   delete st.alertDays;
   return {units:r.units||[], payments:r.payments||{}, sale:r.sale||{}, alerts:r.alerts||{}, settings:st};
