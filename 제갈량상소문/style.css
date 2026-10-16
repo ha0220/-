@@ -101,6 +101,67 @@ h1 { margin: 6px 0 0; font-size: 2.1rem; letter-spacing: .25em; color: var(--red
 .intro { margin: 18px 0; padding: 4px 0; }
 .intro p { margin: .6em 0; }
 
+/* ── 오늘의 조정: 승상 + 세 신하 ── */
+.court { margin-top: 34px; --bubble: #fffaf0; --face-bg: #efe4c6; }
+:root[data-theme="night"] .court { --bubble: #2b2318; --face-bg: #3a2f20; }
+.court > .label {
+  margin: 0; color: var(--red); font-size: .8rem; letter-spacing: .3em; font-weight: 700;
+  border-top: 3px double var(--red); padding-top: 14px;
+}
+.court > h2 { margin: 2px 0 8px; font-size: 1.45rem; line-height: 1.55; }
+
+.face { width: 110px; height: 143px; flex: none; }
+.face svg { display: block; width: 100%; height: 100%; }
+.face.big { width: 150px; height: 195px; }
+
+.chief { display: flex; flex-direction: column; align-items: center; margin: 14px 0 6px; }
+.dais { padding: 10px 40px 0; border-bottom: 10px solid var(--red); border-radius: 12px 12px 0 0;
+  background: radial-gradient(ellipse at 50% 100%, rgba(143,42,28,.22), transparent 70%); }
+.plate { margin-top: 6px; text-align: center; line-height: 1.5; }
+.plate b { display: block; font-size: 1.2rem; color: var(--red); letter-spacing: .12em; }
+.plate span { font-size: .66rem; color: var(--muted); }
+
+/* 큰 말풍선 */
+.bubble {
+  position: relative; background: var(--bubble); color: var(--ink);
+  border: 3px solid var(--red); border-radius: 24px;
+  padding: 16px 24px 18px; box-shadow: 0 3px 10px rgba(60, 40, 10, .14);
+}
+.bubble p { margin: 6px 0 0; font-size: 1.1rem; line-height: 1.85; }
+.bubble::before, .bubble::after { content: ""; position: absolute; width: 0; height: 0; border-style: solid; }
+.chip {
+  display: inline-block; padding: 1px 12px; font-size: .68rem; font-weight: 700; line-height: 1.7;
+  color: #fff; background: var(--red); border-radius: 999px;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+:root[data-theme="night"] .chip { color: #1c1711; }
+
+/* 승상 말풍선: 위(얼굴)쪽으로 꼬리 */
+.bubble.top { width: 100%; margin-top: 22px; }
+.bubble.top::before { top: -22px; left: calc(50% - 16px); border-width: 0 16px 22px; border-color: transparent transparent var(--red); }
+.bubble.top::after  { top: -16px; left: calc(50% - 12px); border-width: 0 12px 18px; border-color: transparent transparent var(--bubble); }
+
+/* 신하: 얼굴과 말풍선을 옆으로 나란히, 왼쪽·오른쪽 번갈아 */
+.mini { display: flex; align-items: center; gap: 26px; margin: 24px 0; }
+.mini .who { display: flex; flex-direction: column; align-items: center; flex: none; width: 128px; text-align: center; }
+.mini .nm { margin-top: 4px; font-weight: 700; color: var(--red); line-height: 1.4; }
+.mini .sb { font-size: .62rem; color: var(--muted); line-height: 1.4; }
+.mini .bubble { flex: 1 1 auto; min-width: 0; }
+.mini.right { flex-direction: row-reverse; }
+.mini.left .bubble::before  { left: -24px; top: calc(50% - 16px); border-width: 16px 24px 16px 0; border-color: transparent var(--red) transparent transparent; }
+.mini.left .bubble::after   { left: -17px; top: calc(50% - 12px); border-width: 12px 19px 12px 0; border-color: transparent var(--bubble) transparent transparent; }
+.mini.right .bubble::before { right: -24px; top: calc(50% - 16px); border-width: 16px 0 16px 24px; border-color: transparent transparent transparent var(--red); }
+.mini.right .bubble::after  { right: -17px; top: calc(50% - 12px); border-width: 12px 0 12px 19px; border-color: transparent transparent transparent var(--bubble); }
+.courtnote { margin: 4px 0 0; font-size: .64rem; color: var(--muted); text-align: center; }
+
+@media (max-width: 620px) {
+  .mini, .mini.right { flex-direction: column; gap: 18px; }
+  .mini .who { width: auto; }
+  .mini .bubble { width: 100%; }
+  .mini.left .bubble::before, .mini.right .bubble::before { left: calc(50% - 16px); right: auto; top: -22px; border-width: 0 16px 22px; border-color: transparent transparent var(--red); }
+  .mini.left .bubble::after, .mini.right .bubble::after   { left: calc(50% - 12px); right: auto; top: -16px; border-width: 0 12px 18px; border-color: transparent transparent var(--bubble); }
+}
+
 .part { margin-top: 44px; }
 .part > .label {
   margin: 0; color: var(--red); font-size: .8rem; letter-spacing: .3em; font-weight: 700;

@@ -149,6 +149,99 @@
   document.title = '제갈량 상소문 · ' + ymd(day);
   paper('intro', S.intro);
 
+  /* ---------- 오늘의 조정: 승상 제갈량 + 세 신하 ---------- */
+  function mod(n, m) { return ((n % m) + m) % m; }
+  function dayFor(key) { var q = qs.get(key); return q !== null && !isNaN(+q) ? +q : dayNum; }
+
+  // 사람 그림(SVG). 모두 이 프로그램 안에서 그려서 인터넷이 필요 없습니다.
+  function face(role) {
+    var INK = '#2a2018', SKIN = '#efd3b3';
+    var C = {
+      zhuge:   { robe: '#f2eee2', trim: '#2f4a78' },
+      finance: { robe: '#8a5a1c', trim: '#f0d9a0' },
+      content: { robe: '#3a4f7a', trim: '#e8dfc8' },
+      health:  { robe: '#3f6f4f', trim: '#e6f1e4' }
+    }[role];
+    var s = '<svg viewBox="0 0 120 156" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">';
+    s += '<circle cx="60" cy="84" r="60" fill="var(--face-bg)"/>';
+    // 도포(몸)와 깃
+    s += '<path d="M24 156 L29 96 Q60 80 91 96 L96 156 Z" fill="' + C.robe + '" stroke="' + INK + '" stroke-width="2.5" stroke-linejoin="round"/>';
+    s += '<path d="M47 86 L60 110 L73 86" fill="none" stroke="' + C.trim + '" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>';
+    // 얼굴
+    s += '<circle cx="60" cy="56" r="23" fill="' + SKIN + '" stroke="' + INK + '" stroke-width="2.5"/>';
+    s += '<circle cx="51" cy="56" r="2.6" fill="' + INK + '"/><circle cx="69" cy="56" r="2.6" fill="' + INK + '"/>';
+    s += '<path d="M52 67 Q60 72 68 67" fill="none" stroke="' + INK + '" stroke-width="2.2" stroke-linecap="round"/>';
+    if (role === 'zhuge') {
+      s += '<path d="M50 72 Q60 100 70 72 Q60 80 50 72 Z" fill="#f6f3ea" stroke="' + INK + '" stroke-width="1.8" stroke-linejoin="round"/>';          // 수염
+      s += '<rect x="40" y="24" width="40" height="22" rx="7" fill="#2f4a78" stroke="' + INK + '" stroke-width="2.5"/>';                              // 윤건
+      s += '<rect x="36" y="42" width="48" height="7" rx="3.5" fill="#2f4a78" stroke="' + INK + '" stroke-width="2.5"/>';
+      s += '<g transform="translate(97 112) rotate(22)"><rect x="-2" y="0" width="4" height="30" rx="2" fill="#6b4a22" stroke="' + INK + '" stroke-width="1.5"/>' +
+           '<ellipse cx="0" cy="-8" rx="10" ry="22" fill="#fffdf6" stroke="' + INK + '" stroke-width="2"/>' +
+           '<path d="M0 -28 L0 10 M-6 -22 L-5 4 M6 -22 L5 4" stroke="#b8b09a" stroke-width="1.2" fill="none"/></g>';                             // 깃털 부채
+    } else if (role === 'finance') {
+      s += '<rect x="44" y="24" width="32" height="24" rx="9" fill="#1d1a16" stroke="' + INK + '" stroke-width="2.5"/>';                               // 사모
+      s += '<rect x="14" y="36" width="34" height="7" rx="3.5" fill="#1d1a16"/><rect x="72" y="36" width="34" height="7" rx="3.5" fill="#1d1a16"/>';
+      s += '<g transform="translate(30 122)"><rect width="60" height="30" rx="4" fill="#c79a4a" stroke="' + INK + '" stroke-width="2.2"/>' +
+           '<line x1="0" y1="9" x2="60" y2="9" stroke="' + INK + '" stroke-width="1.5"/>' +
+           '<line x1="15" y1="0" x2="15" y2="30" stroke="' + INK + '" stroke-width="1.4"/><line x1="30" y1="0" x2="30" y2="30" stroke="' + INK + '" stroke-width="1.4"/><line x1="45" y1="0" x2="45" y2="30" stroke="' + INK + '" stroke-width="1.4"/>' +
+           '<circle cx="15" cy="4.5" r="3" fill="' + INK + '"/><circle cx="30" cy="4.5" r="3" fill="' + INK + '"/><circle cx="45" cy="4.5" r="3" fill="' + INK + '"/>' +
+           '<circle cx="15" cy="17" r="3" fill="#6b3a12"/><circle cx="30" cy="22" r="3" fill="#6b3a12"/><circle cx="45" cy="17" r="3" fill="#6b3a12"/></g>';   // 주판
+    } else if (role === 'content') {
+      s += '<ellipse cx="60" cy="40" rx="38" ry="9" fill="#1d1a16" stroke="' + INK + '" stroke-width="2"/>';                                           // 갓
+      s += '<path d="M45 40 Q45 14 60 14 Q75 14 75 40 Z" fill="#1d1a16" stroke="' + INK + '" stroke-width="2"/>';
+      s += '<g transform="translate(28 120)"><rect width="64" height="30" rx="4" fill="#fbf4df" stroke="' + INK + '" stroke-width="2.2"/>' +
+           '<line x1="8" y1="9" x2="56" y2="9" stroke="' + INK + '" stroke-width="2"/><line x1="8" y1="16" x2="50" y2="16" stroke="' + INK + '" stroke-width="2"/><line x1="8" y1="23" x2="42" y2="23" stroke="' + INK + '" stroke-width="2"/>' +
+           '<rect x="-5" y="-2" width="8" height="34" rx="4" fill="#9a2b1d" stroke="' + INK + '" stroke-width="1.8"/><rect x="61" y="-2" width="8" height="34" rx="4" fill="#9a2b1d" stroke="' + INK + '" stroke-width="1.8"/></g>';   // 두루마리
+    } else {
+      s += '<path d="M38 46 Q38 16 60 16 Q82 16 82 46 Z" fill="#1d1a16" stroke="' + INK + '" stroke-width="2.5"/>';                                    // 복건
+      s += '<path d="M82 40 Q96 44 94 62" fill="none" stroke="#1d1a16" stroke-width="5" stroke-linecap="round"/>';
+      s += '<g transform="translate(84 112)"><rect x="-3" y="-8" width="6" height="7" rx="2" fill="#6b4a22" stroke="' + INK + '" stroke-width="1.5"/>' +
+           '<circle cx="0" cy="3" r="8" fill="#d79a3a" stroke="' + INK + '" stroke-width="2"/><circle cx="0" cy="20" r="12" fill="#d79a3a" stroke="' + INK + '" stroke-width="2"/></g>';   // 호리병
+      s += '<circle cx="40" cy="130" r="11" fill="#ffffff" stroke="' + INK + '" stroke-width="2"/><path d="M40 124 V136 M34 130 H46" stroke="#3f6f4f" stroke-width="4" stroke-linecap="round"/>';  // 의원 표지
+    }
+    return s + '</svg>';
+  }
+
+  var CT = S.court;
+  if (CT) {
+    var cbox = document.getElementById('court');
+    cbox.appendChild(el('p', 'label', '朝會 · 오늘의 조정'));
+    cbox.appendChild(el('h2', '', '승상과 세 신하가 아뢰옵니다'));
+
+    // 승상 (중앙)
+    var zt = CT.zhuge[mod(dayFor('z'), CT.zhuge.length)];
+    var chief = el('div', 'chief');
+    chief.innerHTML =
+      '<div class="dais"><div class="face big">' + face('zhuge') + '</div></div>' +
+      '<div class="plate"><b>승상 제갈량</b><span>조정의 중앙 · 신하들의 말을 듣고 정리하옵니다</span></div>' +
+      '<div class="bubble top"><span class="chip">승상의 말씀</span><p>' + rich(zt) + '</p></div>';
+    cbox.appendChild(chief);
+
+    // 재정 신하: 날마다 점검 주제가 돌아가고(현금흐름 → 보험료 → 유동성), 주제 안에서도 매번 다른 질문
+    var cats = ['세후 현금흐름', '건강보험료', '유동성'];
+    var fd = dayFor('f');
+    var fcat = cats[mod(fd, 3)];
+    var flist = CT.finance.filter(function (x) { return x.k === fcat; });
+    var fi = flist[mod(Math.floor(fd / 3) * 3 + 1, flist.length)];
+    var ci = CT.content[mod(dayFor('c') * 4 + 7, CT.content.length)];
+    var hi = CT.health[mod(dayFor('h') * 5 + 3, CT.health.length)];
+
+    var ministers = [
+      { cls: 'left',  role: 'finance', name: '재정 신하', sub: '곳간을 지키는 이', k: '점검 질문 · ' + fi.k, t: fi.t },
+      { cls: 'right', role: 'content', name: '콘텐츠 신하', sub: '붓을 잡는 이', k: ci.k + ' · ' + V.채널, t: ci.t },
+      { cls: 'left',  role: 'health',  name: '건강 신하', sub: '몸을 살피는 어의', k: hi.k, t: hi.t }
+    ];
+    ministers.forEach(function (m) {
+      var row = el('div', 'mini ' + m.cls);
+      row.innerHTML =
+        '<div class="who"><div class="face">' + face(m.role) + '</div><div class="nm">' + m.name + '</div><div class="sb">' + m.sub + '</div></div>' +
+        '<div class="bubble"><span class="chip">' + esc(m.k) + '</span><p>' + rich(m.t) + '</p></div>';
+      cbox.appendChild(row);
+    });
+    cbox.appendChild(el('p', 'courtnote', '신하들의 말은 판단을 돕는 질문과 제안일 뿐이며, 종목을 사고팔라는 말이 아니옵니다. 최종 결정은 주공의 몫이옵니다.'));
+    window.__SOSO_COURT__ = { zhuge: zt, finance: fi.t, content: ci.t, health: hi.t };
+  }
+
   // 1부
   var p1 = document.getElementById('part1');
   if (a) {
@@ -190,6 +283,16 @@
   p3.appendChild(ul);
 
   paper('outro', S.outro);
+
+  /* 카카오톡용 200자 요약: 오늘의 3부 과제 세 줄 */
+  var K = S.kakao || {};
+  var kk = [(K.part1 || [])[part1.indexOf(a)], (K.part2 || [])[part2.indexOf(b)], (K.review || [])[review.indexOf(r)]];
+  var kakao = '📜 제갈량 상소 ' + (day.getMonth() + 1) + '/' + day.getDate() + '(' + WEEK[day.getDay()] + ')\n' +
+    '① 클로드: ' + (kk[0] || '') + '\n② 은퇴·돈: ' + (kk[1] || '') + '\n③ 복기: ' + (kk[2] || '') +
+    '\n※판단 참고용, 결정은 주공 몫';
+  if (kakao.length > 200) kakao = kakao.slice(0, 199) + '…';
+  window.__SOSO_KAKAO__ = kakao;
+  document.getElementById('btn-kakao').addEventListener('click', function () { copyText(kakao, this); });
 
   // 바닥글: 분량·면책
   function count(id) { return (document.getElementById(id).innerText || '').replace(/\s+/g, '').length; }
