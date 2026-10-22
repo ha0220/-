@@ -1,14 +1,10 @@
 {
   "extraKnownMarketplaces": {
-    "anthropic-agent-skills": {
-      "source": { "source": "github", "repo": "anthropics/skills" }
-    },
     "claude-video": {
       "source": { "source": "github", "repo": "bradautomates/claude-video" }
     }
   },
   "enabledPlugins": {
-    "document-skills@anthropic-agent-skills": true,
     "watch@claude-video": true
   },
   "hooks": {
