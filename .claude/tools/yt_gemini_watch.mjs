@@ -11,6 +11,8 @@
  *
  * 말과 화면을 **한 번에 묻지 않고 두 번 따로** 묻는다 — 한꺼번에 물으면 말로 들은 숫자가
  * 화면에서 읽은 것처럼 섞여 나온다. 갈라 적는 일은 이 따로 묻기에서 시작한다.
+ * 나가는 파일: gemini_<speech|screen>[_<구간>].<모델>.md — 모델 이름이 파일 이름에 들어간다.
+ * 서로 다른 모델로 같은 폴더에 읽혀도 앞 결과를 덮지 않으므로, 둘을 나란히 대조할 수 있다.
  * 파일이 생겼을 때만 종료코드 0 이다.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -42,6 +44,9 @@ function toSeconds(text) {
   if (parts.some((n) => !Number.isFinite(n))) return null;
   return parts.reduce((total, n) => total * 60 + n, 0);
 }
+
+/** 초 → "mmss" (파일 이름용). 0:02 와 00:02 가 같은 이름이 되고, 1:02:03 은 6203 이 된다. */
+const stamp = (s) => String(Math.floor(s / 60)).padStart(2, "0") + String(s % 60).padStart(2, "0");
 
 async function ask(url, prompt, { model, from, to, key }) {
   const filePart = { fileData: { fileUri: url, mimeType: "video/*" } };
@@ -92,7 +97,8 @@ async function main() {
   const key = process.env.GEMINI_API_KEY || null;
   const out = resolve(opt("--out", "yt_out"));
   const focus = opt("--focus");
-  const range = from != null || to != null ? `_${opt("--from", "0")}-${opt("--to", "끝")}`.replace(/:/g, "") : "";
+  const range = from != null || to != null ? `_${from != null ? stamp(from) : "처음"}-${to != null ? stamp(to) : "끝"}` : "";
+  const tag = model.replace(/[^\w.-]/g, "-");
   mkdirSync(out, { recursive: true });
 
   const jobs = [];
@@ -104,7 +110,7 @@ async function main() {
   results.forEach((r, i) => {
     const [kind] = jobs[i];
     if (r.status !== "fulfilled") { console.error(`${kind}: 실패 — ${r.reason.message}`); return; }
-    const file = join(out, `gemini_${kind}${range}.md`);
+    const file = join(out, `gemini_${kind}${range}.${tag}.md`);
     const head = `<!-- 제미나이가 읽은 ${kind === "speech" ? "말" : "화면"} · 모델 ${model} · ${url} · 범위 ${opt("--from", "처음")}~${opt("--to", "끝")} · ${new Date().toISOString().slice(0, 10)} -->\n\n`;
     writeFileSync(file, head + r.value + "\n", "utf8");
     console.log(`${kind}: ${file}`);
