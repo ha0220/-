@@ -73,7 +73,7 @@ T="$(git rev-parse --show-toplevel)/.claude/tools/yt_gemini_watch.mjs"
 node "$T" "<주소>" --out yt_learn/<id>/raw
 ```
 
-말(`gemini_speech.md`)과 화면(`gemini_screen.md`)이 **따로** 나온다. 화면부터 읽는다.
+말(`gemini_speech.<모델>.md`)과 화면(`gemini_screen.<모델>.md`)이 **따로** 나온다. 화면부터 읽는다. 모델 이름이 파일 이름에 들어가므로, 다른 모델로 같은 폴더에 다시 읽혀도 앞 결과가 남는다.
 낱장 확인 대신, 걸린 구간을 다시 읽힌다 (시각은 구간을 줘도 영상 전체 기준으로 나온다):
 
 ```bash
@@ -81,7 +81,7 @@ node "$T" "<주소>" --out yt_learn/<id>/raw --only screen --from 12:20 --to 12:
 ```
 
 - B길에서는 같은 대상을 **서로 다른 모델이 둘 다 같게** 읽었을 때만 숫자·명령어를 `[일치]` 로 쓴다. 다르면 `[불일치]` 나 `[확인못함]` 이다. 같은 영상도 모델마다 끝 시각이나 말줄임이 조금씩 다르게 나온다.
-- 첫 읽기는 기본 모델(`gemini-flash-latest`), 재판독은 `--model gemini-3.5-flash` 로 한다. 기본과 같은 모델로 풀리면 `gemini-3-flash-preview` 로 바꾼다. `pro` 계열은 무료 한도가 0 인 계정이 있다. 쓸 수 있는 모델은 계정마다 달라서, 429·404 가 나면 다른 이름으로 바꿔 다시 한다.
+- 첫 읽기는 기본 모델(`gemini-flash-latest`), 재판독은 `--model gemini-3.5-flash` 로 한다. 기본과 같은 모델로 풀리면 `gemini-3-flash-preview` 로 바꾼다. 기본 모델이 502·503 으로 계속 실패하면 첫 읽기도 `--model gemini-3.5-flash` 로 하고, 재판독만 `gemini-3-flash-preview` 로 한다. `pro` 계열은 무료 한도가 0 인 계정이 있다. 쓸 수 있는 모델은 계정마다 달라서, 429·404 가 나면 다른 이름으로 바꿔 다시 한다.
 - 업로드일·길이·제목을 못 가져온다. 「기준일 불명」으로 적고, 영상이 말한 수치가 언제 기준인지 모른다고 밝힌다.
 - `GEMINI_API_KEY` 가 없고 403 이면 사용자에게 키를 부탁한다(키를 대화창에 붙이지 말고 환경변수로). 지어내서 메우지 않는다.
 
