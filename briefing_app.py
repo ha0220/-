@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 경제 정책 시장 브리핑 — 버튼 한 번에 만들기.
+"""뉴스 브리핑 — 버튼 한 번에 만들기.
 
 ROUTINE_PROMPT.md 의 루틴 프롬프트를 내 컴퓨터의 Claude Code(`claude -p`)로 실행해
 briefings/YYYY-MM-DD.html 을 만들고 브라우저로 연다.
@@ -77,7 +77,7 @@ def build_prompt(today: datetime, part: Path, template: Path | None) -> str:
 ## 로컬 실행 지침 (위 3·4단계보다 우선한다)
 - 오늘은 {today:%Y-%m-%d}({weekday}요일), 한국 시간 기준이다. 날짜는 확정되었으니 `date` 명령을 쓰지 않는다. 휴장일은 검색으로 확인한다.
 - {design}
-- `<title>` 은 `한국 경제 정책 시장 브리핑 {today:%m.%d}` 로 한다.
+- 이 브리핑의 이름은 "뉴스 브리핑"이다. `<title>` 은 `뉴스 브리핑 {today:%m.%d}`, 머리말 제목은 `뉴스 브리핑 — {today.year}년 {today.month}월 {today.day}일({weekday})` 로 쓴다(위 프롬프트의 옛 이름 대신).
 - 완성한 HTML 전체를 Write 도구로 `{part}` 에 저장한다. 이 경로 밖의 파일은 만들거나 고치지 않는다.
 - Artifact 게시, PushNotification, 사용자에게 질문은 하지 않는다(도구도 없다). 글자 수 확인은 프로그램이 하므로 python 을 실행하지 않고, 본문 가시 텍스트 7,000자 이상을 목표로 쓴다.
 - 마지막 응답에는 3줄 요약만 쓴다.
@@ -303,14 +303,14 @@ def run_gui(args) -> int:
     state = {"job": None, "started": 0.0}
 
     root = tk.Tk()
-    root.title("한국 경제 정책 시장 브리핑")
+    root.title("뉴스 브리핑")
     root.geometry("620x560")
     root.minsize(480, 420)
 
     frame = ttk.Frame(root, padding=16)
     frame.pack(fill="both", expand=True)
 
-    ttk.Label(frame, text="한국 경제 정책 시장 브리핑", font=("", 16, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="뉴스 브리핑", font=("", 16, "bold")).pack(anchor="w")
     date_label = ttk.Label(frame, foreground="#555")
     date_label.pack(anchor="w", pady=(2, 12))
 
@@ -408,10 +408,10 @@ def run_gui(args) -> int:
             refresh_idle()
         elif job:
             elapsed = int(time.time() - state["started"])
-            root.title(f"한국 경제 정책 시장 브리핑 — 작성 중 {elapsed // 60:02d}:{elapsed % 60:02d}")
+            root.title(f"뉴스 브리핑 — 작성 중 {elapsed // 60:02d}:{elapsed % 60:02d}")
             root.after(300, pump)
             return
-        root.title("한국 경제 정책 시장 브리핑")
+        root.title("뉴스 브리핑")
 
     def stop():
         if state["job"]:
@@ -434,7 +434,7 @@ def run_gui(args) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="한국 경제 정책 시장 브리핑 — 버튼 한 번에 만들기")
+    parser = argparse.ArgumentParser(description="뉴스 브리핑 — 버튼 한 번에 만들기")
     parser.add_argument("--no-gui", action="store_true", help="창 없이 터미널에서 실행")
     parser.add_argument("--no-open", action="store_true", help="완료 후 브라우저를 열지 않음(터미널 모드)")
     parser.add_argument("--claude", help="claude 실행 파일 경로(기본: PATH 에서 검색)")
