@@ -188,7 +188,8 @@ h3{font-size:14px;margin:14px 0 6px}
       <div><label>원천징수세(비우면 자동)</label><input type="number" id="dTax" min="0" step="any" inputmode="decimal"></div>
       <div style="grid-column:span 2"><label>메모</label><input id="dMemo" placeholder="재투자 여부 등"></div>
     </div>
-    <p class="note" style="margin:8px 0 0">원천징수세를 비우면 ISA 계좌는 0원, 그 외 계좌는 설정의 세율(기본 15.4%)로 계산합니다. 증권사 입금 내역의 실제 세금과 다르면 직접 입력하세요.</p>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin:10px 0 0"><input type="checkbox" id="dCash" checked style="width:auto"> 실수령액을 해당 계좌 예수금에 더하기 (아래 붙여넣기에도 적용)</label>
+    <p class="note" style="margin:6px 0 0">이미 예수금을 증권사 실제 잔고로 맞춰 뒀다면 해제하세요(이중 계산 방지). 수정·삭제하면 더했던 금액이 자동으로 되돌려집니다. 원천징수세를 비우면 ISA 계좌는 0원, 그 외 계좌는 설정의 세율(기본 15.4%)로 계산합니다.</p>
     <div class="bar" style="margin:12px 0 0">
       <button class="pri" id="btnDAdd">추가 (Enter)</button>
       <button id="btnDCancel" class="hide">수정 취소</button>
@@ -604,6 +605,11 @@ function applyInit(){
 let dEditId=null;
 const autoDivTax=(acct,gross)=>isIsa(acct)?0:Math.round(gross*db.settings.divTax/100);
 const dNet=d=>d.gross-d.tax;
+// 분배금 실수령액을 계좌 예수금에 더하거나(sign=1) 되돌린다(sign=-1). 0 아래로는 내려가지 않는다
+function cashDelta(d,sign){
+  const k=d.acct||'',v=Math.max(0,Math.round((db.cash[k]||0)+sign*dNet(d)));
+  if(v>0)db.cash[k]=v;else delete db.cash[k];
+}
 const sumBy=(a,f)=>a.reduce((s,d)=>s+f(d),0);
 function readDiv(){
   const name=$('dName').value.trim(),gross=parseFloat($('dGross').value),acct=$('dAcct').value.trim();
@@ -611,27 +617,36 @@ function readDiv(){
   if(!(gross>0))return err('세전 분배금을 확인하세요');
   const t=$('dTax').value,tax=t===''?autoDivTax(acct,gross):parseFloat(t);
   if(!(tax>=0)||tax>gross)return err('원천징수세는 0 이상, 세전 분배금 이하로 입력하세요');
-  return {id:dEditId||uid(),date:$('dDate').value||todayStr(),acct,name,gross,tax,memo:$('dMemo').value.trim()};
+  return {id:dEditId||uid(),date:$('dDate').value||todayStr(),acct,name,gross,tax,memo:$('dMemo').value.trim(),cash:$('dCash').checked};
 }
 function clearDivForm(){
   ['dName','dGross','dTax','dMemo'].forEach(i=>$(i).value='');
-  $('dTitle').textContent='받은 분배금 기록';$('btnDAdd').textContent='추가 (Enter)';$('btnDCancel').classList.add('hide');dEditId=null;
+  $('dTitle').textContent='받은 분배금 기록';$('btnDAdd').textContent='추가 (Enter)';$('btnDCancel').classList.add('hide');dEditId=null;$('dCash').checked=true;
 }
 function addDiv(){
   const d=readDiv();if(!d)return;
-  if(dEditId){const i=db.divs.findIndex(x=>x.id===dEditId);db.divs[i]=d}else db.divs.push(d);
+  if(dEditId){const i=db.divs.findIndex(x=>x.id===dEditId);if(db.divs[i].cash)cashDelta(db.divs[i],-1);db.divs[i]=d}else db.divs.push(d);
+  if(d.cash)cashDelta(d,1);
   const was=!!dEditId;save();clearDivForm();render();
-  flash(`분배금 ${was?'수정':'추가'}: ${d.name} 세전 ${fmt(d.gross)}원 / 실수령 ${fmt(dNet(d))}원`);$('dName').focus();
+  flash(`분배금 ${was?'수정':'추가'}: ${d.name} 세전 ${fmt(d.gross)}원 / 실수령 ${fmt(dNet(d))}원`+(d.cash?` · ${acctLabel(d.acct)} 예수금 ${fmt(db.cash[d.acct||'']||0)}원`:' · 예수금에는 반영하지 않음'));$('dName').focus();
 }
 function editDiv(id){
   const d=db.divs.find(x=>x.id===id);if(!d)return;dEditId=id;
   $('dDate').value=d.date;$('dAcct').value=d.acct||'';$('dName').value=d.name;$('dGross').value=d.gross;$('dTax').value=d.tax;$('dMemo').value=d.memo||'';
+  $('dCash').checked=!!d.cash;
   $('dTitle').textContent='분배금 수정';$('btnDAdd').textContent='수정 저장';$('btnDCancel').classList.remove('hide');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function delDiv(id){
   const d=db.divs.find(x=>x.id===id);if(!d||!confirm(`삭제할까요?\n${d.date} ${d.name} ${fmt(d.gross)}원`))return;
-  db.divs=db.divs.filter(x=>x.id!==id);save();render();flash('삭제했습니다');
+  if(d.cash)cashDelta(d,-1);
+  db.divs=db.divs.filter(x=>x.id!==id);save();render();flash('삭제했습니다'+(d.cash?` (예수금에서 ${fmt(dNet(d))}원 되돌림)`:''));
+}
+// 이미 기록한 분배금의 예수금 반영 여부를 건별로 바꾼다
+function toggleDivCash(id){
+  const d=db.divs.find(x=>x.id===id);if(!d)return;
+  cashDelta(d,d.cash?-1:1);d.cash=!d.cash;save();render();
+  flash(`${d.name} ${fmt(dNet(d))}원 ${d.cash?'예수금에 반영했습니다':'예수금 반영을 취소했습니다'} · ${acctLabel(d.acct)} 예수금 ${fmt(db.cash[d.acct||'']||0)}원`);
 }
 function parseDivPaste(text){
   const out=[],bad=[],defAcct=$('dAcct').value.trim();
@@ -665,8 +680,10 @@ function applyDiv(){
   const {out,bad}=previewDiv();
   if(!out.length){flash('반영할 분배금이 없습니다','warn');return}
   if(bad.length&&!confirm(`읽지 못한 줄 ${bad.length}건은 빼고 ${out.length}건만 반영할까요?`))return;
+  const addCash=$('dCash').checked;
+  out.forEach(d=>{d.cash=addCash;if(addCash)cashDelta(d,1)});
   db.divs.push(...out);save();$('dPaste').value='';$('dPasteOut').innerHTML='';render();
-  flash(`분배금 ${out.length}건을 반영했습니다 (세전 ${fmt(sumBy(out,d=>d.gross))}원)`);
+  flash(`분배금 ${out.length}건을 반영했습니다 (세전 ${fmt(sumBy(out,d=>d.gross))}원)`+(addCash?` · 실수령 ${fmt(sumBy(out,dNet))}원을 예수금에 더함`:' · 예수금에는 반영하지 않음'));
 }
 function renderDiv(c){
   const today=todayStr(),ym=today.slice(0,7),yr=today.slice(0,4),mon=Number(today.slice(5,7));
@@ -680,11 +697,11 @@ function renderDiv(c){
   const byN={};db.divs.forEach(d=>{const n=byN[d.name]||(byN[d.name]={g:0,y:0,t:0,last:''});n.g+=d.gross;n.t+=d.tax;if(d.date.startsWith(yr))n.y+=d.gross;if(d.date>n.last)n.last=d.date});
   $('divName').innerHTML=Object.keys(byN).length?`<table><tr><th>종목</th><th>올해(세전)</th><th>누계(세전)</th><th>누계 실수령</th><th>최근 지급일</th></tr>${Object.entries(byN).sort((a,b)=>b[1].g-a[1].g).map(([k,v])=>`<tr><td class="l">${esc(k)}</td><td>${fmt(v.y)}</td><td>${fmt(v.g)}</td><td>${fmt(v.g-v.t)}</td><td>${v.last}</td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
   const list=[...db.divs].sort((a,b)=>b.date.localeCompare(a.date));
-  $('divList').innerHTML=list.length?`<table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th><th class="l">메모</th><th></th></tr>${list.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td><td class="l note">${esc(d.memo)}</td><td><button class="sm" data-de="${d.id}">수정</button> <button class="sm del" data-dd="${d.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
+  $('divList').innerHTML=list.length?`<table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th><th>예수금</th><th class="l">메모</th><th></th></tr>${list.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td><td>${d.cash?'<span class="dn">✓ 반영</span>':'<span class="note">–</span>'} <button class="sm" data-dc="${d.id}">${d.cash?'취소':'반영'}</button></td><td class="l note">${esc(d.memo)}</td><td><button class="sm" data-de="${d.id}">수정</button> <button class="sm del" data-dd="${d.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
 }
 function downloadDivCsv(){
-  const rows=[...db.divs].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>[d.date,acctLabel(d.acct),d.name,d.gross,d.tax,dNet(d),d.memo||'']);
-  saveCsv(`분배금_${todayStr()}.csv`,['지급일','계좌','종목명','세전 분배금(원)','원천징수세(원)','실수령(원)','메모'],rows);
+  const rows=[...db.divs].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>[d.date,acctLabel(d.acct),d.name,d.gross,d.tax,dNet(d),d.cash?'Y':'N',d.memo||'']);
+  saveCsv(`분배금_${todayStr()}.csv`,['지급일','계좌','종목명','세전 분배금(원)','원천징수세(원)','실수령(원)','예수금 반영','메모'],rows);
   flash('받은 분배금을 CSV로 저장했습니다.');
 }
 
@@ -1033,6 +1050,7 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.d)delTrade(e.target.dataset.d);
   if(e.target.dataset.de)editDiv(e.target.dataset.de);
   if(e.target.dataset.dd)delDiv(e.target.dataset.dd);
+  if(e.target.dataset.dc)toggleDivCash(e.target.dataset.dc);
   if(e.target.dataset.mdel){const i=+e.target.dataset.mdel;if(confirm(`'${db.macro[i].item||'(빈 항목)'}' 점검 항목을 삭제할까요?`)){db.macro.splice(i,1);save();renderMacro();render()}}
 });
 // 보유현황 표의 입력칸: 현재가·목표가·손절가·섹터·전략·예수금
