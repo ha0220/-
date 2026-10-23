@@ -1,2 +1,5 @@
 __pycache__/
 briefings/.*.part.html
+# 유튜브 담당자 작업물 — 받은 영상·장면 사진은 크고 다시 만들 수 있다. 보고서(report.md)만 남긴다.
+yt_learn/*/raw/
+yt_out/

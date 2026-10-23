@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>상가 임대관리</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#667085;--line:#e3e6ec;--accent:#1f5fbf;--ok:#1a7f4b;--warn:#b25e00;--bad:#c62828;--okbg:#e6f4ec;--warnbg:#fff1dc;--badbg:#fde8e8;--accbg:#e8f0fc}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--ink:#e8ebf1;--mute:#9aa3b2;--line:#2b3240;--accent:#6ea2f0;--ok:#4cc38a;--warn:#f0a94a;--bad:#f07272;--okbg:#17301f;--warnbg:#3a2a12;--badbg:#3a1a1a;--accbg:#1a2740}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+header{padding:14px 16px 0;max-width:1000px;margin:0 auto}
+h1{font-size:20px;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px}
+nav{display:flex;gap:4px;overflow-x:auto;margin:12px 0 0;border-bottom:1px solid var(--line)}
+nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--mute);cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--accent);border-color:var(--accent);font-weight:600}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpi .l{color:var(--mute);font-size:12px}.kpi .v{font-size:20px;font-weight:700;margin-top:2px}
+h2{font-size:16px;margin:20px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.t-ok{background:var(--okbg);color:var(--ok)}.t-warn{background:var(--warnbg);color:var(--warn)}.t-bad{background:var(--badbg);color:var(--bad)}.t-info{background:var(--accbg);color:var(--accent)}
+button.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+button.btn.ghost{background:none;color:var(--accent);border:1px solid var(--line)}
+button.btn.sm{padding:3px 9px;font-size:13px}
+button.btn.danger{background:none;color:var(--bad);border:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+label{display:block;font-size:13px;color:var(--mute)}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=checkbox]{width:auto}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);width:min(680px,94vw);padding:18px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.note{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:13px;margin:10px 0}
+.hint{color:var(--mute);font-size:12px}
+.empty{color:var(--mute);padding:24px;text-align:center}
+.res td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.res tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
+</style>
+</head>
+<body>
+<header>
+  <h1>상가 임대관리</h1>
+  <div class="sub">호실·계약·수금·매각 시 세금 추정 · 데이터는 이 브라우저에만 저장됩니다 (백업 탭에서 파일로 저장)</div>
+  <nav id="nav"></nav>
+</header>
+<main id="main"></main>
+<dialog id="dlg"></dialog>
+
+<script>
+"use strict";
+const STORE = "rental-manager-v1";
+// 세율·공제는 바뀔 수 있으므로 한 곳에 모아 둠. 신고 전 국세청/세무사로 반드시 확인.
+const TAX = {
+  asOf: "2026-10-13 법령 원문 대조(소득세법 제55·95·103·104·105조, 지방세법 제92·103조의3, 상가임대차법 제2·10·11조·시행령 제2·4조; 국회계류 개정안은 입법예고 사이트 원문, 정부 세제개편안은 원문 미확인)",
+  brackets: [[14e6,.06,0],[50e6,.15,1.26e6],[88e6,.24,5.76e6],[150e6,.35,15.44e6],[300e6,.38,19.94e6],[500e6,.40,25.94e6],[1e9,.42,35.94e6],[Infinity,.45,65.94e6]],
+  basic: 2.5e6, localRate: .10, vat: .10, rentCap: .05
+};
+
+// 알림 시점(일 전) 기본값. norm()이 load()에서 먼저 실행되므로 그보다 위에 선언해야 한다.
+const DEFAULT_STAGES = [90, 60, 45, 30, 21, 14, 7, 3, 1];
+const STAGES_VER = 8;   // 기본 시점 목록을 바꿀 때 올리고, 직전 버전의 기본값을 PREV_DEFAULTS에 추가한다
+const PREV_DEFAULTS = {0: "90,60", 2: "90,60,30", 3: "90,60,30,7", 4: "90,60,30,7,1", 5: "90,60,30,7,3,1", 6: "90,60,30,14,7,3,1", 7: "90,60,30,21,14,7,3,1"};   // 버전별 '이전 기본값'(0 = 버전 표시가 없던 때)
+let S = load();
+let tab = "dash";
+function load(){ let r = null; try{ r = JSON.parse(localStorage.getItem(STORE)); }catch(e){} return norm(r); }
+function norm(r){
+  r = (r && Array.isArray(r.units)) ? r : {};
+  const st = Object.assign({}, r.settings);
+  // 이전 버전의 단일 기준(alertDays)을 알림 시점 목록으로 이전
+  // (num 등 유틸은 이 함수보다 뒤에 정의되므로 여기서는 Number만 사용)
+  const old = Number(st.alertDays);
+  if(!Array.isArray(st.alertStages)) st.alertStages = (old && old !== 90) ? [old] : DEFAULT_STAGES.slice();
+  // 그 시점의 기본값을 그대로 쓰던 경우에만 새 기본값으로 올린다. 직접 바꾼 목록은 건드리지 않는다.
+  else if(st.stagesVer !== STAGES_VER && st.alertStages.join() === PREV_DEFAULTS[st.stagesVer || 0]) st.alertStages = DEFAULT_STAGES.slice();
+  st.stagesVer = STAGES_VER;
+  delete st.alertDays;
+  return {units:r.units||[], payments:r.payments||{}, sale:r.sale||{}, alerts:r.alerts||{}, settings:st};
+}
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- 유틸 ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = v => Number(String(v ?? "").replace(/,/g,"")) || 0;
+const won = n => Math.round(n).toLocaleString("ko-KR") + "원";
+function big(n){ n = Math.round(n); const a = Math.abs(n), s = n<0?"-":"";
+  if(a>=1e8){ const e = Math.floor(a/1e8), m = Math.round((a%1e8)/1e4); return s+e+"억"+(m?" "+m.toLocaleString()+"만원":"원"); }
+  if(a>=1e4) return s+Math.round(a/1e4).toLocaleString()+"만원"; return s+a+"원"; }
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const pd = s => s ? new Date(s+"T00:00:00") : null;
+const ymd = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const ym = d => ymd(d).slice(0,7);
+function addMonths(d,n){ const r = new Date(d); const day = r.getDate(); r.setDate(1); r.setMonth(r.getMonth()+n); const last = new Date(r.getFullYear(), r.getMonth()+1, 0).getDate(); r.setDate(Math.min(day,last)); return r; }
+const dayDiff = (a,b) => Math.round((a-b)/864e5);
+const id = () => Math.random().toString(36).slice(2,10);
+const monthly = u => num(u.rent) + num(u.mgmt);
+const expected = u => Math.round(monthly(u) * (u.vat ? 1+TAX.vat : 1));
+const rented = () => S.units.filter(u => u.status === "임대");
+
+/* ---------- 탭 ---------- */
+const TABS = [["dash","대시보드"],["units","호실·계약"],["pay","수금"],["sale","매각 시뮬"],["data","백업"]];
+function renderNav(){
+  const pend = dueSoon().filter(x => !x.sent).length;
+  $("#nav").innerHTML = TABS.map(([k,l]) => `<button class="${k===tab?"on":""}" data-tab="${k}">${l}${k==="dash"&&pend?` <span class="tag t-bad">${pend}</span>`:""}</button>`).join("");
+}
+function render(){ renderNav(); ({dash:rDash,units:rUnits,pay:rPay,sale:rSale,data:rData})[tab](); }
+
+/* ---------- 대시보드 ---------- */
+function noticeInfo(u){
+  const end = pd(u.end); if(!end) return null;
+  const t = today(), left = dayDiff(end,t);
+  const from = addMonths(end,-6), to = addMonths(end,-1);
+  let tag, cls, msg;
+  if(left < 0){ tag="만료"; cls="t-bad"; msg=`만료 ${-left}일 경과`; }
+  else if(t < from){ tag="여유"; cls="t-ok"; msg=`통지 가능 시작 ${ymd(from)} (D-${dayDiff(from,t)})`; }
+  else if(t <= to){ tag="통지 구간"; cls = left<=60?"t-bad":"t-warn"; msg=`갱신거절·조건변경 통지 마감 ${ymd(to)} (D-${dayDiff(to,t)})`; }
+  else { tag="통지기한 경과"; cls="t-bad"; msg=`통지 마감(${ymd(to)}) 지남 → 같은 조건 갱신 가능성, 확인 필요`; }
+  return {left, tag, cls, msg, to};
+}
+function overdueList(){
+  const t = today(), out = [];
+  for(let i=0;i<3;i++){
+    const m = addMonths(new Date(t.getFullYear(), t.getMonth(), 1), -i), key = ym(m);
+    for(const u of rented()){
+      if(!expected(u)) continue;
+      const st = pd(u.start), en = pd(u.end);
+      if((st && new Date(m.getFullYear(), m.getMonth()+1, 0) < st) || (en && new Date(m.getFullYear(), m.getMonth(), 1) > en)) continue;
+      const day = Math.min(num(u.payDay)||25, 28);
+      const due = new Date(m.getFullYear(), m.getMonth(), day);
+      const paid = S.payments[key]?.[u.id]?.paid;
+      if(!paid && t > due) out.push({u, key, amt: expected(u), days: dayDiff(t,due)});
+    }
+  }
+  return out;
+}
+/* ---------- 만료 알림 (카카오톡 공유) ---------- */
+// 알림 시점(일 전) 목록. 계약마다 현재 남은 일수가 속한 가장 가까운 시점 하나만 알림 대상이 된다.
+function stages(){
+  const a = [...new Set((S.settings.alertStages || []).map(n => Math.round(num(n))).filter(n => n >= 1 && n <= 365))].sort((x,y) => y-x);
+  return a.length ? a : DEFAULT_STAGES;
+}
+const akey = (u,d) => `${u.id}|${u.end}|${d}`;
+function dueSoon(){
+  const st = stages();
+  return rented().map(u => ({u, i: noticeInfo(u)})).filter(x => x.i && x.i.left >= 0)
+    .map(x => ({...x, stage: Math.min(...st.filter(d => x.i.left <= d), Infinity)})).filter(x => isFinite(x.stage))
+    .sort((a,b) => a.i.left-b.i.left).map(x => ({...x, sent: S.alerts[akey(x.u,x.stage)] || ""}));
+}
+function alertText(items){
+  return `[상가 임대관리] 계약 만료 알림 (${ymd(today())} 기준)\n` + items.map(({u,i,stage}) =>
+    `\n• ${u.name} ${u.tenant||""} — ${stage}일 전 알림\n  만료 ${u.end} (D-${i.left})\n  ${i.msg}\n  증액 상한(5%) 월세 ${won(num(u.rent)*(1+TAX.rentCap))} (환산보증금 ${won(num(u.deposit)+num(u.rent)*100)}, 기준액 이하일 때만 적용)`).join("\n")
+    + "\n\n※ 참고용입니다. 갱신·증액은 계약서와 법률 전문가 확인이 필요합니다.";
+}
+async function copyText(text){ await navigator.clipboard.writeText(text); }
+async function sendAlert(){
+  const items = dueSoon().filter(x => !x.sent); if(!items.length) return;
+  const text = alertText(items);
+  try{
+    if(navigator.share) await navigator.share({text});
+    else { await copyText(text); alert("메시지를 복사했습니다. 카카오톡 '나와의 채팅'에 붙여넣어 보내세요."); }
+  }catch(e){
+    if(e && e.name === "AbortError") return;           // 공유창을 닫은 경우: 발송 처리하지 않음
+    try{ await copyText(text); alert("메시지를 복사했습니다. 카카오톡 '나와의 채팅'에 붙여넣어 보내세요."); }
+    catch(_){ prompt("아래 내용을 복사해 카카오톡으로 보내세요.", text); return; }
+  }
+  // 보낸 시점과 그보다 이른(큰 일수) 시점은 함께 발송 처리: 늦게 열었을 때 같은 계약이 90일·60일로 두 번 뜨지 않게 한다
+  const now = ymd(new Date());
+  items.forEach(x => stages().filter(d => d >= x.stage).forEach(d => S.alerts[akey(x.u,d)] = now));
+  save(); render();
+}
+async function copyAlert(){
+  const items = dueSoon(); if(!items.length) return;
+  try{ await copyText(alertText(items)); alert("메시지를 복사했습니다."); }catch(e){ prompt("아래 내용을 복사하세요.", alertText(items)); }
+}
+function alertCard(){
+  const st = stages(), L = dueSoon(), pend = L.filter(x => !x.sent);
+  const head = `<div class="row" style="justify-content:space-between"><b>계약 만료 알림 (${st.join("·")}일 전)</b><label style="display:flex;gap:6px;align-items:center">알림 시점(일 전, 쉼표로 구분) <input id="alertStages" type="text" value="${st.join(", ")}" style="width:110px"></label></div>`;
+  if(!L.length) return `<div class="card" style="margin-bottom:16px">${head}<div class="hint">${Math.max(...st)}일 이내 만료되는 계약이 없습니다.</div></div>`;
+  return `<div class="card" style="margin-bottom:16px;border-color:${pend.length?"var(--bad)":"var(--line)"}">${head}
+  <div class="tablewrap"><table><tr><th>호실</th><th>임차인</th><th>만료일</th><th>알림 시점</th><th>카카오톡</th></tr>
+  ${L.map(({u,i,stage,sent})=>`<tr><td>${esc(u.name)}</td><td>${esc(u.tenant)}</td><td>${esc(u.end)} <span class="hint">D-${i.left}</span></td><td>${stage}일 전</td><td>${sent?`<span class="tag t-ok">발송 ${esc(sent)}</span>`:`<span class="tag t-bad">미발송</span>`}</td></tr>`).join("")}</table></div>
+  <div class="row" style="margin-top:10px">${pend.length?`<button class="btn" data-act="sendalert">카카오톡으로 보내기 (${pend.length}건)</button>`:""}<button class="btn ghost" data-act="copyalert">메시지 복사</button></div>
+  <div class="hint">웹페이지는 닫혀 있으면 알림을 보낼 수 없습니다. 앱을 열면 이 카드가 표시되며, 휴대폰에서 누르면 공유창이 열립니다. 카카오톡 '나와의 채팅'을 선택해 보내세요.</div></div>`;
+}
+
+function rDash(){
+  const n = S.units.length, occ = rented().length, vac = n - occ;
+  const inc = rented().reduce((s,u)=>s+monthly(u),0);
+  const dep = rented().reduce((s,u)=>s+num(u.deposit),0);
+  const od = overdueList(), odSum = od.reduce((s,o)=>s+o.amt,0);
+  const exp = rented().map(u => ({u, i: noticeInfo(u)})).filter(x => x.i).sort((a,b)=>a.i.left-b.i.left);
+  const soon = exp.filter(x => x.i.left <= 365);
+  $("#main").innerHTML = n===0 ? `<div class="card empty">등록된 호실이 없습니다.<br><br><button class="btn" data-act="add">호실 추가</button> <button class="btn ghost" data-act="sample">예시 데이터 불러오기</button></div>` : `
+  ${alertCard()}
+  <div class="grid">
+    <div class="card kpi"><div class="l">호실 / 임대 중 / 공실</div><div class="v">${n} / ${occ} / ${vac}</div></div>
+    <div class="card kpi"><div class="l">공실률</div><div class="v">${n?Math.round(vac/n*100):0}%</div></div>
+    <div class="card kpi"><div class="l">월 임대수입 (부가세 제외)</div><div class="v">${big(inc)}</div></div>
+    <div class="card kpi"><div class="l">연 환산</div><div class="v">${big(inc*12)}</div></div>
+    <div class="card kpi"><div class="l">보증금 합계</div><div class="v">${big(dep)}</div></div>
+    <div class="card kpi"><div class="l">연체·미수 (최근 3개월)</div><div class="v" style="color:${odSum?"var(--bad)":"var(--ok)"}">${odSum?big(odSum):"없음"}</div></div>
+  </div>
+  <h2>계약 만료 일정 (1년 이내)</h2>
+  ${soon.length ? `<div class="card tablewrap"><table><tr><th>호실</th><th>임차인</th><th>만료일</th><th>상태</th><th>안내</th><th class="n">증액 상한(5%) 월세</th></tr>
+  ${soon.map(({u,i})=>`<tr><td>${esc(u.name)}</td><td>${esc(u.tenant)}</td><td>${esc(u.end)}<div class="hint">D${i.left>=0?"-":"+"}${Math.abs(i.left)}</div></td><td><span class="tag ${i.cls}">${i.tag}</span></td><td>${esc(i.msg)}</td><td class="n">${won(num(u.rent)*(1+TAX.rentCap))}</td></tr>`).join("")}</table></div>` : `<div class="card empty">1년 내 만료되는 계약이 없습니다.</div>`}
+  <div class="note">상가건물 임대차보호법 기준(참고용): 임대인이 계약 만료 6개월~1개월 전에 갱신거절·조건변경 통지를 하지 않으면 같은 조건으로 갱신된 것으로 봅니다. 임차인의 갱신요구권은 최초 계약부터 10년까지, 증액 상한은 5%입니다. 다만 환산보증금(보증금 + 월세×100)이 지역별 기준액(시행령 제2조: 서울 9억, 과밀억제권역·부산 6.9억, 광역시 등 5.4억, 그 밖의 지역 3.7억 — 2026-07-01 시행)을 넘으면 법 제2조 제3항에 따라 묵시적 갱신(제10조 제4항)과 5% 상한(제11조)은 적용되지 않고, 갱신요구권(10년)은 그대로 적용됩니다. 계약별 적용 여부는 법률 전문가에게 확인하세요.</div>
+  ${od.length ? `<h2>연체·미수</h2><div class="card tablewrap"><table><tr><th>월</th><th>호실</th><th>임차인</th><th class="n">금액(부가세 포함)</th><th class="n">경과</th></tr>${od.map(o=>`<tr><td>${o.key}</td><td>${esc(o.u.name)}</td><td>${esc(o.u.tenant)}</td><td class="n">${won(o.amt)}</td><td class="n">${o.days}일</td></tr>`).join("")}</table></div>`:""}`;
+}
+
+/* ---------- 호실·계약 ---------- */
+function rUnits(){
+  $("#main").innerHTML = `<div class="row"><button class="btn" data-act="add">+ 호실 추가</button></div>
+  ${S.units.length ? `<div class="card tablewrap"><table><tr><th>호실</th><th>상태</th><th>임차인</th><th class="n">보증금</th><th class="n">월세</th><th class="n">관리비</th><th>계약기간</th><th></th></tr>
+  ${S.units.map(u=>`<tr><td>${esc(u.name)}<div class="hint">${esc(u.floor)} ${u.area?esc(u.area)+"㎡":""}</div></td>
+  <td><span class="tag ${u.status==="임대"?"t-ok":"t-warn"}">${esc(u.status)}</span></td>
+  <td>${esc(u.tenant)}<div class="hint">${esc(u.phone)}</div></td>
+  <td class="n">${u.status==="임대"?won(num(u.deposit)):"-"}</td><td class="n">${u.status==="임대"?won(num(u.rent)):"-"}</td><td class="n">${u.status==="임대"?won(num(u.mgmt)):"-"}</td>
+  <td>${esc(u.start)} ~ ${esc(u.end)}${u.firstStart?`<div class="hint">최초 입주 ${esc(u.firstStart)} · 10년 도래 ${ymd(addMonths(pd(u.firstStart),120))}</div>`:""}</td>
+  <td><button class="btn ghost sm" data-act="edit" data-id="${u.id}">수정</button> <button class="btn danger sm" data-act="del" data-id="${u.id}">삭제</button></td></tr>`).join("")}</table></div>` : `<div class="card empty">호실을 추가하세요.</div>`}`;
+}
+const FIELDS = [["name","호실","text"],["floor","층","text"],["area","면적(㎡)","number"],["status","상태","select"],["tenant","임차인","text"],["phone","연락처","text"],["deposit","보증금(원)","number"],["rent","월세(원, 부가세 제외)","number"],["mgmt","관리비(원)","number"],["payDay","납부일(1~28)","number"],["firstStart","최초 입주일","date"],["start","현 계약 시작","date"],["end","현 계약 만료","date"]];
+function openForm(u){
+  u = u || {id:id(), status:"임대", payDay:25, vat:true};
+  const f = FIELDS.map(([k,l,t]) => t==="select"
+    ? `<div><label>${l}<select name="${k}"><option${u[k]==="임대"?" selected":""}>임대</option><option${u[k]==="공실"?" selected":""}>공실</option></select></label></div>`
+    : `<div><label>${l}<input name="${k}" type="${t}" value="${esc(u[k])}"></label></div>`).join("");
+  $("#dlg").innerHTML = `<form method="dialog" id="uform"><h2 style="margin-top:0">${S.units.some(x=>x.id===u.id)?"호실 수정":"호실 추가"}</h2>
+  <div class="form">${f}<div><label><input type="checkbox" name="vat" ${u.vat?"checked":""}> 부가세 별도 청구(10%)</label></div></div>
+  <div style="margin:10px 0"><label>메모<textarea name="note" rows="2">${esc(u.note)}</textarea></label></div>
+  <div class="row"><button class="btn" value="ok">저장</button><button class="btn ghost" value="cancel" formnovalidate>취소</button></div></form>`;
+  $("#dlg").showModal();
+  $("#uform").onsubmit = e => {
+    if(e.submitter?.value !== "ok") return;
+    const fd = new FormData(e.target), nu = {id:u.id};
+    FIELDS.forEach(([k,,t]) => nu[k] = fd.get(k)); nu.vat = fd.get("vat")==="on"; nu.note = fd.get("note");
+    const i = S.units.findIndex(x=>x.id===u.id); i>=0 ? S.units[i]=nu : S.units.push(nu);
+    save(); render();
+  };
+}
+
+/* ---------- 수금 ---------- */
+let payMonth = ym(new Date());
+function rPay(){
+  const list = rented(), P = S.payments[payMonth] || {};
+  const tot = list.reduce((s,u)=>s+expected(u),0), got = list.reduce((s,u)=>s+(P[u.id]?.paid?expected(u):0),0);
+  $("#main").innerHTML = `<div class="row"><label style="display:flex;gap:8px;align-items:center">월 <input type="month" id="pm" value="${payMonth}" style="width:auto"></label>
+  <span class="tag t-info">수금 ${big(got)} / ${big(tot)}</span> <span class="tag ${tot-got?"t-warn":"t-ok"}">미수 ${big(tot-got)}</span></div>
+  ${list.length ? `<div class="card tablewrap"><table><tr><th>수금</th><th>호실</th><th>임차인</th><th class="n">청구액(월세+관리비${list.some(u=>u.vat)?"+부가세":""})</th><th>입금일</th></tr>
+  ${list.map(u=>{const p=P[u.id]||{};return `<tr><td><input type="checkbox" data-pay="${u.id}" ${p.paid?"checked":""}></td><td>${esc(u.name)}</td><td>${esc(u.tenant)}</td><td class="n">${won(expected(u))}</td><td>${p.paid?esc(p.date):`<span class="hint">납부일 ${num(u.payDay)||25}일</span>`}</td></tr>`}).join("")}</table></div>` : `<div class="card empty">임대 중인 호실이 없습니다.</div>`}`;
+}
+
+/* ---------- 매각 시뮬 ---------- */
+function calcTax(g, noLT){ // g: 양도차익, noLT: 장기보유특별공제 폐지 시나리오
+  const out = {gain:g};
+  const buy = pd(S.sale.buyDate), sell = pd(S.sale.sellDate);
+  let years = 0; if(buy && sell){ years = sell.getFullYear()-buy.getFullYear(); if(addMonths(buy,years*12) > sell) years--; years = Math.max(0,years); }
+  out.years = years;
+  out.ltRate = (!noLT && years>=3) ? Math.min(.30, years*.02) : 0;
+  out.lt = Math.max(0,g) * out.ltRate;
+  out.base = Math.max(0, g - out.lt - TAX.basic);
+  let tax = 0; for(const [cap,r,ded] of TAX.brackets){ if(out.base <= cap){ tax = out.base*r - ded; break; } }
+  out.income = Math.max(0,Math.round(tax)); out.local = Math.round(out.income*TAX.localRate);
+  out.total = out.income + out.local; return out;
+}
+const SALE_IN = [["price","양도가액(매각가, 원)","number"],["cost","취득가액(원)","number"],["exp","필요경비(취득세·중개수수료 등, 원)","number"],["buyDate","취득일","date"],["sellDate","양도 예정일","date"],["deposit","직접 반환할 보증금(매수인 승계 시 0)","number"],["loan","상환할 대출 잔액(원)","number"]];
+function rSale(){
+  const v = S.sale, dep = rented().reduce((s,u)=>s+num(u.deposit),0);
+  $("#main").innerHTML = `<div class="card"><div class="form">${SALE_IN.map(([k,l,t])=>`<div><label>${l}<input data-sale="${k}" type="${t}" value="${esc(v[k])}"></label></div>`).join("")}</div>
+  <div class="hint" style="margin-top:6px">현재 등록된 보증금 합계: ${won(dep)}</div></div>
+  <div id="saleRes"></div>
+  <div class="note">단순 추정입니다. 일반 건물·토지 양도, 단일 자산, 기본세율, 장기보유특별공제(3년 이상 보유 시 연 2%, 최대 30%) 가정이며 기준: ${TAX.asOf}. 세율표(6~45%·누진공제), 기본공제 250만원, 장기보유특별공제 표 1(3년 6%~15년 이상 30%), 지방소득세(양도세의 10%, 지방세법 제103조의3·제92조)는 법령 원문과 일치함을 확인했습니다(소득세법 시행 2026-07-01 현행 및 시행예정판 기준). 예정신고는 양도일이 속하는 달의 말일부터 2개월 이내입니다(제105조). 실제 세액은 취득 시기, 토지·건물 구분, 보유 중 감가상각·필요경비 증빙, 다른 양도소득 합산, 부가가치세(건물분 10%, 포괄양수도 시 면제 여부), 신고 기한 등에 따라 달라집니다. 신고 전 세무사 확인이 필요합니다.</div>`;
+  calcSale();
+}
+function calcSale(){
+  const v = S.sale, gain = num(v.price) - num(v.cost) - num(v.exp);
+  if(!num(v.price)){ $("#saleRes").innerHTML = `<div class="card empty">양도가액과 취득가액을 입력하면 세후 현금이 계산됩니다.</div>`; return; }
+  const t = calcTax(gain), net = num(v.price) - t.total - num(v.deposit) - num(v.loan);
+  $("#saleRes").innerHTML = `<div class="card" style="margin-top:12px"><table class="res">
+  <tr><td>양도차익 (양도가 - 취득가 - 경비)</td><td>${won(gain)}</td></tr>
+  <tr><td>보유기간</td><td>${t.years}년${(!v.buyDate||!v.sellDate)?" (날짜 미입력)":""}</td></tr>
+  <tr><td>장기보유특별공제 (${Math.round(t.ltRate*100)}%)</td><td>-${won(t.lt)}</td></tr>
+  <tr><td>기본공제</td><td>-${won(Math.min(TAX.basic,Math.max(0,gain-t.lt)))}</td></tr>
+  <tr><td>과세표준</td><td>${won(t.base)}</td></tr>
+  <tr><td>양도소득세</td><td>${won(t.income)}</td></tr>
+  <tr><td>지방소득세 (10%)</td><td>${won(t.local)}</td></tr>
+  <tr><td>세금 합계</td><td>${won(t.total)}</td></tr>
+  <tr><td>직접 반환 보증금</td><td>-${won(num(v.deposit))}</td></tr>
+  <tr><td>대출 상환</td><td>-${won(num(v.loan))}</td></tr>
+  <tr class="tot"><td>세후 순현금 유입 (추정)</td><td style="color:${net>=0?"var(--ok)":"var(--bad)"}">${won(net)} (${big(net)})</td></tr></table></div>
+  <div class="hint" style="margin-top:6px">참고: 양도가의 ${(t.total/num(v.price)*100).toFixed(1)}%가 세금으로 계산됨. 양도가를 ±10% 바꿔 최악·최선 시나리오도 확인하세요.</div>
+  ${t.lt > 0 ? (() => { const z = calcTax(gain, true), net0 = num(v.price) - z.total - num(v.deposit) - num(v.loan); return `<div class="card" style="margin-top:12px;border-color:var(--warn)"><b>시나리오: 장기보유특별공제가 폐지될 경우</b>
+  <table class="res" style="margin-top:6px"><tr><td>세금 합계</td><td>${won(z.total)}</td></tr>
+  <tr><td>현행 대비 추가 세금</td><td style="color:var(--bad)">+${won(z.total - t.total)}</td></tr>
+  <tr class="tot"><td>세후 순현금 유입</td><td>${won(net0)} (${big(net0)})</td></tr></table>
+  <div class="hint">토지·상가 등 비주택 자산의 보유기간별 공제(표 1)를 없애는 소득세법 일부개정법률안(의안번호 2218625, 최혁진의원 등 13인, 2026-04-27 발의)은 2026-07-29 재정경제기획위원회에 상정되어 소위 회부된 단계이며 확정되지 않았습니다. 발의안 부칙은 시행일 2027-01-01, 시행 전 양도분은 종전 규정 적용입니다. 현행 소득세법(시행예정판 2028-01-01 포함)에는 아직 폐지 내용이 없습니다. 2026-08 정부 세제개편안은 비주택(토지·주택 외 건물) 공제를 '장기보유 소득공제'로 개편하고 시행일을 2028-01-01로 제시한 것으로 보도되었으나 정부 원문은 확인하지 못했습니다. 양도일이 확정 시행일 이후가 되면 이 시나리오가 실제 세액에 가까워질 수 있으니 세무사와 확인하세요.</div></div>`; })() : ""}`;
+}
+
+/* ---------- 백업 ---------- */
+function rData(){
+  $("#main").innerHTML = `<div class="card"><p>브라우저 저장소는 캐시 삭제·기기 변경 시 사라질 수 있습니다. <b>월 1회 파일로 저장</b>해 두세요.</p>
+  <div class="row"><button class="btn" data-act="export">백업 파일 저장(JSON)</button>
+  <label class="btn ghost" style="display:inline-block;cursor:pointer;color:var(--accent)">백업 불러오기<input type="file" id="imp" accept=".json" hidden></label>
+  <button class="btn danger" data-act="reset">전체 초기화</button></div></div>`;
+}
+
+/* ---------- 이벤트 ---------- */
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-tab],[data-act]"); if(!t) return;
+  if(t.dataset.tab){ tab = t.dataset.tab; return render(); }
+  const a = t.dataset.act, u = S.units.find(x=>x.id===t.dataset.id);
+  if(a==="add") openForm();
+  else if(a==="edit") openForm(u);
+  else if(a==="del"){ if(confirm(`'${u.name}' 호실을 삭제할까요? 수금 기록도 함께 사라집니다.`)){ S.units = S.units.filter(x=>x!==u); Object.values(S.payments).forEach(m=>delete m[u.id]); save(); render(); } }
+  else if(a==="sample") loadSample();
+  else if(a==="sendalert") sendAlert();
+  else if(a==="copyalert") copyAlert();
+  else if(a==="export"){ const b = new Blob([JSON.stringify(S,null,1)],{type:"application/json"}), l = document.createElement("a"); l.href = URL.createObjectURL(b); l.download = `rental-${ymd(new Date())}.json`; l.click(); }
+  else if(a==="reset"){ if(confirm("모든 데이터를 삭제합니다. 계속할까요?")){ S = norm(null); save(); render(); } }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if(t.id==="pm"){ payMonth = t.value || payMonth; rPay(); }
+  else if(t.id==="alertStages"){ S.settings.alertStages = t.value.split(/[,\s]+/).filter(Boolean).map(Number); save(); render(); }
+  else if(t.dataset.pay){ (S.payments[payMonth] ||= {})[t.dataset.pay] = {paid:t.checked, date:t.checked?ymd(new Date()):""}; save(); rPay(); }
+  else if(t.id==="imp"){ const r = new FileReader(); r.onload = () => { try{ const d = JSON.parse(r.result); if(!Array.isArray(d.units)) throw 0; if(confirm("현재 데이터를 불러온 파일로 교체할까요?")){ S = norm(d); save(); tab="dash"; render(); } }catch(_){ alert("올바른 백업 파일이 아닙니다."); } }; r.readAsText(t.files[0]); }
+});
+document.addEventListener("input", e => { const k = e.target.dataset.sale; if(k){ S.sale[k] = e.target.value; save(); calcSale(); } });
+
+function loadSample(){
+  const t = today(), d = (m) => ymd(addMonths(t,m));
+  S.units = [
+    {id:id(),name:"101호",floor:"1층",area:"45",status:"임대",tenant:"예시 카페",phone:"010-0000-0001",deposit:"50000000",rent:"3000000",mgmt:"300000",payDay:25,vat:true,firstStart:d(-60),start:d(-10),end:d(14),note:""},
+    {id:id(),name:"102호",floor:"1층",area:"38",status:"임대",tenant:"예시 편의점",phone:"010-0000-0002",deposit:"40000000",rent:"2500000",mgmt:"250000",payDay:10,vat:true,firstStart:d(-130),start:d(-34),end:d(2),note:""},
+    {id:id(),name:"201호",floor:"2층",area:"60",status:"임대",tenant:"예시 학원",phone:"010-0000-0003",deposit:"30000000",rent:"2000000",mgmt:"200000",payDay:5,vat:true,firstStart:d(-12),start:d(-12),end:d(12),note:""},
+    {id:id(),name:"202호",floor:"2층",area:"55",status:"공실",tenant:"",phone:"",deposit:"",rent:"",mgmt:"",payDay:25,vat:true,firstStart:"",start:"",end:"",note:"예시 공실"}];
+  S.sale = {price:"1500000000",cost:"700000000",exp:"30000000",buyDate:d(-132),sellDate:d(24),deposit:"0",loan:"0"};
+  save(); render();
+}
+render();
+</script>
+</body>
+</html>
