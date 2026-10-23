@@ -67,6 +67,7 @@ h3{font-size:14px;margin:14px 0 6px}
 <div class="tabs" id="tabs">
   <button data-t="today" class="on">오늘 입력</button>
   <button data-t="hold">보유 현황</button>
+  <button data-t="div">분배금</button>
   <button data-t="hist">매매일지</button>
   <button data-t="pnl">기간 손익</button>
   <button data-t="set">설정</button>
@@ -145,6 +146,40 @@ h3{font-size:14px;margin:14px 0 6px}
   </div>
 </section>
 
+<section id="t-div" class="hide">
+  <div class="card"><div class="kpis" id="divKpi"></div></div>
+  <div class="card">
+    <h2 id="dTitle">받은 분배금 기록</h2>
+    <div class="grid" id="dForm">
+      <div><label>지급일</label><input type="date" id="dDate"></div>
+      <div><label>계좌</label><input id="dAcct" list="acctList" placeholder="중개형 ISA"></div>
+      <div><label>종목명</label><input id="dName" list="nameList"></div>
+      <div><label>세전 분배금(원)</label><input type="number" id="dGross" min="0" step="any" inputmode="decimal"></div>
+      <div><label>원천징수세(비우면 자동)</label><input type="number" id="dTax" min="0" step="any" inputmode="decimal"></div>
+      <div style="grid-column:span 2"><label>메모</label><input id="dMemo" placeholder="재투자 여부 등"></div>
+    </div>
+    <p class="note" style="margin:8px 0 0">원천징수세를 비우면 ISA 계좌는 0원, 그 외 계좌는 설정의 세율(기본 15.4%)로 계산합니다. 증권사 입금 내역의 실제 세금과 다르면 직접 입력하세요.</p>
+    <div class="bar" style="margin:12px 0 0">
+      <button class="pri" id="btnDAdd">추가 (Enter)</button>
+      <button id="btnDCancel" class="hide">수정 취소</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>분배금 붙여넣기</h2>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-15 SOL 코리아고배당 28,269</code> — 금액 뒤에 원천징수세가 오면 함께 읽습니다. 줄 안에 <code>ISA</code>·<code>종합위탁</code>이 있으면 그 계좌, 없으면 위 입력창의 계좌로 들어갑니다.</p>
+    <textarea id="dPaste" placeholder="2026-10-15	SOL 코리아고배당	28,269"></textarea>
+    <div class="bar" style="margin:10px 0 0"><button id="btnDParse">미리보기</button><button class="pri" id="btnDApply">반영</button></div>
+    <div id="dPasteOut"></div>
+  </div>
+  <div class="card"><h2>월별 수령액 <span class="note">예상 월 분배금은 지금 보유 종목 기준입니다</span></h2><div class="tw" id="divMonth"></div></div>
+  <div class="card"><h2>종목별 누계</h2><div class="tw" id="divName"></div></div>
+  <div class="card">
+    <h2>지급 내역</h2>
+    <div class="bar"><button id="btnDCsv">📊 분배금 CSV</button></div>
+    <div class="tw" id="divList"></div>
+  </div>
+</section>
+
 <section id="t-hist" class="hide">
   <div class="card">
     <div class="grid" style="margin-bottom:10px">
@@ -174,6 +209,7 @@ h3{font-size:14px;margin:14px 0 6px}
     <div class="grid">
       <div><label>비과세 한도(원) — 일반형 200만 / 서민형 400만</label><input type="number" id="sIsaLimit" step="any"></div>
       <div><label>한도 초과분 분리과세율(%)</label><input type="number" id="sIsaTax" step="any"></div>
+      <div><label>일반 계좌 분배금 원천징수세율(%)</label><input type="number" id="sDivTax" step="any"></div>
     </div>
     <p class="note">* 세율은 임시 기본값입니다. 증권사 체결내역의 실제 수수료·세금과 다르면 여기서 고치거나 거래 입력 시 직접 적으세요. 엑셀 매매일지는 비용을 빼지 않고 손익을 계산하므로, 이 장부의 실현손익은 엑셀보다 수수료·세금만큼 적게 나옵니다.</p>
     <div class="bar" style="margin:0"><button class="pri" id="btnSaveSet">설정 저장</button></div>
@@ -200,7 +236,7 @@ const pct=n=>(n>0?'+':'')+n.toFixed(2)+'%';
 const todayStr=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const ACCTS=['종합위탁','중개형 ISA'];
 const NOACCT='(계좌 미지정)';
-const defaults={trades:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9}};
+const defaults={trades:[],divs:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -210,7 +246,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,divs:r.divs||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -445,6 +481,94 @@ function applyInit(){
   render();flash(`${out.length}개 종목을 ${acctLabel(acct)} 기초 보유로 등록했습니다. 목표가·손절가는 표에서 입력하세요.`);
 }
 
+// ---------- 받은 분배금 ----------
+let dEditId=null;
+const autoDivTax=(acct,gross)=>isIsa(acct)?0:Math.round(gross*db.settings.divTax/100);
+const dNet=d=>d.gross-d.tax;
+const sumBy=(a,f)=>a.reduce((s,d)=>s+f(d),0);
+function readDiv(){
+  const name=$('dName').value.trim(),gross=parseFloat($('dGross').value),acct=$('dAcct').value.trim();
+  if(!name)return err('종목명을 입력하세요');
+  if(!(gross>0))return err('세전 분배금을 확인하세요');
+  const t=$('dTax').value,tax=t===''?autoDivTax(acct,gross):parseFloat(t);
+  if(!(tax>=0)||tax>gross)return err('원천징수세는 0 이상, 세전 분배금 이하로 입력하세요');
+  return {id:dEditId||uid(),date:$('dDate').value||todayStr(),acct,name,gross,tax,memo:$('dMemo').value.trim()};
+}
+function clearDivForm(){
+  ['dName','dGross','dTax','dMemo'].forEach(i=>$(i).value='');
+  $('dTitle').textContent='받은 분배금 기록';$('btnDAdd').textContent='추가 (Enter)';$('btnDCancel').classList.add('hide');dEditId=null;
+}
+function addDiv(){
+  const d=readDiv();if(!d)return;
+  if(dEditId){const i=db.divs.findIndex(x=>x.id===dEditId);db.divs[i]=d}else db.divs.push(d);
+  const was=!!dEditId;save();clearDivForm();render();
+  flash(`분배금 ${was?'수정':'추가'}: ${d.name} 세전 ${fmt(d.gross)}원 / 실수령 ${fmt(dNet(d))}원`);$('dName').focus();
+}
+function editDiv(id){
+  const d=db.divs.find(x=>x.id===id);if(!d)return;dEditId=id;
+  $('dDate').value=d.date;$('dAcct').value=d.acct||'';$('dName').value=d.name;$('dGross').value=d.gross;$('dTax').value=d.tax;$('dMemo').value=d.memo||'';
+  $('dTitle').textContent='분배금 수정';$('btnDAdd').textContent='수정 저장';$('btnDCancel').classList.remove('hide');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function delDiv(id){
+  const d=db.divs.find(x=>x.id===id);if(!d||!confirm(`삭제할까요?\n${d.date} ${d.name} ${fmt(d.gross)}원`))return;
+  db.divs=db.divs.filter(x=>x.id!==id);save();render();flash('삭제했습니다');
+}
+function parseDivPaste(text){
+  const out=[],bad=[],defAcct=$('dAcct').value.trim();
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;
+    const toks=(line.includes('\t')?line.split('\t'):line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s+/)).map(s=>s.trim()).filter(Boolean);
+    let date=null,acct=null,name=[],nums=[];
+    for(const k of toks){
+      const d=k.match(/^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/);
+      if(d&&!date){date=`${d[1]}-${d[2].padStart(2,'0')}-${d[3].padStart(2,'0')}`;continue}
+      if(!acct&&/^종합위탁$|^위탁$/.test(k)){acct='종합위탁';continue}
+      if(!acct&&/^(중개형\s*)?ISA$/i.test(k)){acct='중개형 ISA';continue}
+      if(/^(분배금|배당금|배당|입금)$/.test(k))continue;
+      const n=k.replace(/[,원]/g,'');
+      if(/^\d+(\.\d+)?$/.test(n)){nums.push(parseFloat(n));continue}
+      name.push(k);
+    }
+    if(!name.length||!(nums[0]>0)||(nums[1]!==undefined&&nums[1]>nums[0])){bad.push(line);continue}
+    const a=acct??defAcct;
+    out.push({id:uid(),date:date||todayStr(),acct:a,name:name.join(' '),gross:nums[0],tax:nums[1]!==undefined?nums[1]:autoDivTax(a,nums[0]),memo:''});
+  }
+  return {out,bad};
+}
+function previewDiv(){
+  const {out,bad}=parseDivPaste($('dPaste').value);let h='';
+  if(out.length)h+=`<div class="tw"><table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th></tr>${out.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td></tr>`).join('')}</table></div>`;
+  if(bad.length)h+=`<div class="msg warn">읽지 못한 줄 ${bad.length}건:<br>${bad.map(esc).join('<br>')}</div>`;
+  $('dPasteOut').innerHTML=h;return {out,bad};
+}
+function applyDiv(){
+  const {out,bad}=previewDiv();
+  if(!out.length){flash('반영할 분배금이 없습니다','warn');return}
+  if(bad.length&&!confirm(`읽지 못한 줄 ${bad.length}건은 빼고 ${out.length}건만 반영할까요?`))return;
+  db.divs.push(...out);save();$('dPaste').value='';$('dPasteOut').innerHTML='';render();
+  flash(`분배금 ${out.length}건을 반영했습니다 (세전 ${fmt(sumBy(out,d=>d.gross))}원)`);
+}
+function renderDiv(c){
+  const today=todayStr(),ym=today.slice(0,7),yr=today.slice(0,4),mon=Number(today.slice(5,7));
+  const inc=incomeTotals(incomeRows(c).filter(r=>r.y>0));
+  const ytd=db.divs.filter(d=>d.date.startsWith(yr)),cur=db.divs.filter(d=>d.date.startsWith(ym));
+  const avg=sumBy(ytd,d=>d.gross)/mon;
+  $('divKpi').innerHTML=[['올해 받은 분배금(세전)',fmt(sumBy(ytd,d=>d.gross))+'원',''],['올해 실수령',fmt(sumBy(ytd,d=>dNet(d)))+'원',''],['이번 달 받은 분배금(세전)',fmt(sumBy(cur,d=>d.gross))+'원',''],['월 평균(세전, 1월~이번 달)',fmt(avg)+'원',''],['예상 월 분배금(현재 보유)',inc.monthly>0?fmt(inc.monthly)+'원':'-',''],['월 평균 ÷ 예상',inc.monthly>0?(avg/inc.monthly*100).toFixed(0)+'%':'-','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
+  const byM={};db.divs.forEach(d=>{const m=byM[d.date.slice(0,7)]||(byM[d.date.slice(0,7)]={n:0,g:0,t:0});m.n++;m.g+=d.gross;m.t+=d.tax});
+  const mk=Object.keys(byM).sort().reverse();
+  $('divMonth').innerHTML=mk.length?`<table><tr><th>월</th><th>건수</th><th>세전</th><th>원천징수세</th><th>실수령</th><th>예상 월 대비(세전)</th></tr>${mk.map(k=>{const m=byM[k];return `<tr><td>${k}</td><td>${m.n}</td><td>${fmt(m.g)}</td><td>${fmt(m.t)}</td><td>${fmt(m.g-m.t)}</td><td>${inc.monthly>0?(m.g/inc.monthly*100).toFixed(0)+'%':'-'}</td></tr>`}).join('')}<tr><td><b>합계</b></td><td>${db.divs.length}</td><td><b>${fmt(sumBy(db.divs,d=>d.gross))}</b></td><td>${fmt(sumBy(db.divs,d=>d.tax))}</td><td><b>${fmt(sumBy(db.divs,d=>dNet(d)))}</b></td><td></td></tr></table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
+  const byN={};db.divs.forEach(d=>{const n=byN[d.name]||(byN[d.name]={g:0,y:0,t:0,last:''});n.g+=d.gross;n.t+=d.tax;if(d.date.startsWith(yr))n.y+=d.gross;if(d.date>n.last)n.last=d.date});
+  $('divName').innerHTML=Object.keys(byN).length?`<table><tr><th>종목</th><th>올해(세전)</th><th>누계(세전)</th><th>누계 실수령</th><th>최근 지급일</th></tr>${Object.entries(byN).sort((a,b)=>b[1].g-a[1].g).map(([k,v])=>`<tr><td class="l">${esc(k)}</td><td>${fmt(v.y)}</td><td>${fmt(v.g)}</td><td>${fmt(v.g-v.t)}</td><td>${v.last}</td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
+  const list=[...db.divs].sort((a,b)=>b.date.localeCompare(a.date));
+  $('divList').innerHTML=list.length?`<table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th><th class="l">메모</th><th></th></tr>${list.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td><td class="l note">${esc(d.memo)}</td><td><button class="sm" data-de="${d.id}">수정</button> <button class="sm del" data-dd="${d.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
+}
+function downloadDivCsv(){
+  const rows=[...db.divs].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>[d.date,acctLabel(d.acct),d.name,d.gross,d.tax,dNet(d),d.memo||'']);
+  saveCsv(`분배금_${todayStr()}.csv`,['지급일','계좌','종목명','세전 분배금(원)','원천징수세(원)','실수령(원)','메모'],rows);
+  flash('받은 분배금을 CSV로 저장했습니다.');
+}
+
 // ---------- 마감 ----------
 function closeDay(date){
   date=date||$('fDate').value||todayStr();
@@ -471,6 +595,13 @@ function closeDay(date){
   const mReal=c.sorted.filter(t=>t.side==='sell'&&t.date.startsWith(month)&&t.date<=date).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
   const yReal=c.sorted.filter(t=>t.side==='sell'&&t.date.startsWith(year)&&t.date<=date).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
   lines.push('',`이번 달 누적 실현손익 ${fmtS(mReal)}원 / 올해 누적 ${fmtS(yReal)}원`);
+  const dToday=db.divs.filter(d=>d.date===date),dMonth=db.divs.filter(d=>d.date.startsWith(month)&&d.date<=date);
+  if(dMonth.length){
+    lines.push('','[받은 분배금]');
+    dToday.forEach(d=>lines.push(`· 오늘 ${d.name} 세전 ${fmt(d.gross)}원 / 실수령 ${fmt(dNet(d))}원 [${acctLabel(d.acct)}]`));
+    const expM=incomeTotals(incomeRows(c).filter(r=>r.y>0)).monthly,g=sumBy(dMonth,d=>d.gross);
+    lines.push(`이번 달 누적: 세전 ${fmt(g)}원 / 실수령 ${fmt(sumBy(dMonth,dNet))}원`+(expM>0?` (월 예상 ${fmt(expM)}원 대비 ${(g/expM*100).toFixed(0)}%)`:''));
+  }
   const sums=acctSummary(c).filter(s=>s.hs.length||s.cash);
   if(sums.length){
     lines.push('','[계좌별 현황]');
@@ -540,6 +671,7 @@ function render(){
   $('incomeTable').innerHTML=inc.length?`<table><tr><th>계좌</th><th class="l">종목명</th><th>보유수량</th><th>평가금액</th><th>비중</th><th>배당 주기</th><th>연간 예상 배당률(%)</th><th>예상 월 분배금</th><th>예상 연 배당금</th></tr>${inc.map(r=>`<tr><td class="l">${esc(acctLabel(r.p.acct))}</td><td class="l">${esc(r.p.name)}</td><td>${fmt(r.p.qty)}</td><td>${fmt(r.val)}</td><td>${it.val>0?(r.val/it.val*100).toFixed(2)+'%':'-'}</td><td><input class="hin t" data-id="cycle|${esc(r.p.name)}" list="cycleList" value="${esc(r.m.cycle||'')}" style="width:100px"></td><td>${inp('yield|'+r.p.name,r.m.yield)}</td><td>${r.y>0?fmt(r.monthly):'-'}</td><td>${r.y>0?fmt(r.yearly):'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td class="l">${inc.length}개 종목</td><td></td><td>${fmt(it.val)}</td><td>100.00%</td><td>월 환산</td><td>${it.rate.toFixed(2)}%</td><td><b>${fmt(it.monthly)}</b></td><td><b>${fmt(it.yearly)}</b></td></tr></table>`:'<p class="note">ETF나 ISA 계좌 보유 종목이 없습니다.</p>';
   const lim=db.settings.isaLimit,over=Math.max(0,it.isaYear-lim);
   $('incomeNote').innerHTML=it.isaYear>0?`ISA 계좌 예상 연 분배금 ${fmt(it.isaYear)}원 → 비과세 한도 ${fmt(lim)}원의 ${(it.isaYear/lim*100).toFixed(0)}%`+(over>0?` · 초과 예상 ${fmt(over)}원에 ${db.settings.isaTax}% 분리과세 시 약 ${fmt(over*db.settings.isaTax/100)}원`:' · 한도 이내')+`<br>분배금만 단순 추정한 값입니다. ISA 안의 매매손익 통산, 실제 분배금 변동(커버드콜 등), 원천징수 시점은 반영하지 않습니다.`:'ISA 계좌 종목에 배당률을 입력하면 비과세 한도 대비 예상치가 나옵니다.';
+  renderDiv(c);
   // 매매일지
   const from=$('hFrom').value,to=$('hTo').value,q=$('hQ').value.trim().toLowerCase(),ha=$('hAcct').value;
   const keep=$('hAcct').value;
@@ -608,11 +740,11 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  ['today','hold','hist','pnl','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['today','hold','div','hist','pnl','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
 }
 $('tabs').addEventListener('click',e=>{if(e.target.dataset.t)tab(e.target.dataset.t)});
 $('btnAdd').onclick=addTrade;
@@ -628,6 +760,12 @@ $('btnClose').onclick=()=>{
 $('btnParse').onclick=previewPaste;
 $('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){flash(`${n}건 반영`);closeDay()}};
 $('btnInit').onclick=applyInit;
+$('btnDAdd').onclick=addDiv;
+$('btnDCancel').onclick=clearDivForm;
+$('dForm').addEventListener('keydown',e=>{if(e.key==='Enter')addDiv()});
+$('btnDParse').onclick=previewDiv;
+$('btnDApply').onclick=applyDiv;
+$('btnDCsv').onclick=downloadDivCsv;
 $('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);flash('복사했습니다')}catch(e){flash('복사 실패: 직접 선택해서 복사하세요','warn')}};
 $('btnBackup').onclick=()=>downloadBackup();
 $('btnCsv').onclick=downloadCsv;
@@ -639,6 +777,8 @@ $('fDate').onchange=render;
 document.body.addEventListener('click',e=>{
   if(e.target.dataset.e)editTrade(e.target.dataset.e);
   if(e.target.dataset.d)delTrade(e.target.dataset.d);
+  if(e.target.dataset.de)editDiv(e.target.dataset.de);
+  if(e.target.dataset.dd)delDiv(e.target.dataset.dd);
 });
 // 보유현황 표의 입력칸: 현재가·목표가·손절가·섹터·전략·예수금
 document.body.addEventListener('change',e=>{
@@ -664,14 +804,14 @@ document.body.addEventListener('change',e=>{
 $('btnSaveSet').onclick=()=>{
   db.settings.fee=parseFloat($('sFee').value)||0;db.settings.taxStock=parseFloat($('sTaxStock').value)||0;
   db.settings.taxEtf=parseFloat($('sTaxEtf').value)||0;db.settings.auto=$('sAuto').checked;
-  db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;save();render();flash('설정을 저장했습니다');
+  db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;save();render();flash('설정을 저장했습니다');
 };
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
 $('btnWipe').onclick=()=>{
   if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
   db=JSON.parse(JSON.stringify(defaults));save();applySettings();render();flash('삭제했습니다');
 };
-$('fDate').value=todayStr();$('iDate').value=todayStr();$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();render();
+$('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('dAcct').value=ACCTS[1];$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();render();
 window.__ledger={compute,parsePaste,parseInit,get db(){return db}};
 })();
 </script>
