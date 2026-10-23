@@ -69,6 +69,7 @@ h3{font-size:14px;margin:14px 0 6px}
   <button data-t="dash">대시보드</button>
   <button data-t="hold">보유 현황</button>
   <button data-t="div">분배금</button>
+  <button data-t="flow">입출금</button>
   <button data-t="hist">매매일지</button>
   <button data-t="pnl">기간 손익</button>
   <button data-t="rules">투자원칙</button>
@@ -212,6 +213,32 @@ h3{font-size:14px;margin:14px 0 6px}
   </div>
 </section>
 
+<section id="t-flow" class="hide">
+  <div class="card"><div class="kpis" id="flowKpi"></div></div>
+  <div class="card">
+    <h2 id="xTitle">입출금 기록 <span class="note">은행 ↔ 증권계좌 입금·출금 (계좌 간 이체는 한쪽 출금 + 다른 쪽 입금으로 두 건 기록)</span></h2>
+    <div class="grid" id="xForm">
+      <div><label>날짜</label><input type="date" id="xDate"></div>
+      <div><label>계좌</label><input id="xAcct" list="acctList" placeholder="종합위탁"></div>
+      <div><label>구분</label><select id="xType"><option value="in">입금</option><option value="out">출금</option></select></div>
+      <div><label>금액(원)</label><input type="number" id="xAmt" min="0" step="any" inputmode="decimal"></div>
+      <div style="grid-column:span 2"><label>메모</label><input id="xMemo" placeholder="예: ISA 납입, 생활비 출금"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin:10px 0 0"><input type="checkbox" id="xCash" checked style="width:auto"> 해당 계좌 예수금에 반영 (입금 +, 출금 −)</label>
+    <p class="note" style="margin:6px 0 0">이미 예수금을 증권사 실제 잔고로 맞춰 뒀다면 해제하고 입력하세요(이중 계산 방지). 수정·삭제하면 반영했던 금액이 자동으로 되돌려집니다.</p>
+    <div class="bar" style="margin:12px 0 0">
+      <button class="pri" id="btnXAdd">추가 (Enter)</button>
+      <button id="btnXCancel" class="hide">수정 취소</button>
+    </div>
+  </div>
+  <div class="card"><h2>월별 입출금</h2><div class="tw" id="flowMonth"></div></div>
+  <div class="card">
+    <h2>입출금 내역</h2>
+    <div class="bar"><button id="btnXCsv">📊 입출금 CSV</button></div>
+    <div class="tw" id="flowList"></div>
+  </div>
+</section>
+
 <section id="t-hist" class="hide">
   <div class="card">
     <div class="grid" style="margin-bottom:10px">
@@ -309,7 +336,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={macro:DEF_MACRO,road:DEF_ROAD,memo:'',trades:[],divs:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1}};
+const defaults={macro:DEF_MACRO,road:DEF_ROAD,memo:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -319,7 +346,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},memo:r.memo||'',divs:r.divs||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},memo:r.memo||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -727,6 +754,63 @@ function downloadDivCsv(){
   flash('받은 분배금을 CSV로 저장했습니다.');
 }
 
+// ---------- 입출금 ----------
+let xEditId=null;
+const flowAmt=f=>f.type==='in'?f.amount:-f.amount;
+function flowCash(f,sign){addCash(f.acct,sign*flowAmt(f))}
+function readFlow(){
+  const amount=parseFloat($('xAmt').value),acct=$('xAcct').value.trim();
+  if(!(amount>0))return err('금액을 확인하세요');
+  return {id:xEditId||uid(),date:$('xDate').value||todayStr(),acct,type:$('xType').value,amount,memo:$('xMemo').value.trim(),cash:$('xCash').checked};
+}
+function clearFlowForm(){
+  ['xAmt','xMemo'].forEach(i=>$(i).value='');$('xCash').checked=true;xEditId=null;
+  $('xTitle').firstChild.textContent='입출금 기록 ';$('btnXAdd').textContent='추가 (Enter)';$('btnXCancel').classList.add('hide');
+}
+function addFlow(){
+  const f=readFlow();if(!f)return;
+  if(xEditId){const i=db.flows.findIndex(x=>x.id===xEditId);if(db.flows[i].cash)flowCash(db.flows[i],-1);db.flows[i]=f}else db.flows.push(f);
+  if(f.cash)flowCash(f,1);
+  const was=!!xEditId;save();clearFlowForm();render();
+  const v=db.cash[f.acct||'']||0;
+  flash(`${acctLabel(f.acct)} ${f.type==='in'?'입금':'출금'} ${fmt(f.amount)}원 ${was?'수정':'기록'}`+(f.cash?` · 예수금 ${fmt(v)}원`+(v<0?' ⚠ 마이너스 — 예수금 입력을 확인하세요':''):' · 예수금에는 반영하지 않음'),f.cash&&v<0?'warn':'ok');
+  $('xAmt').focus();
+}
+function editFlow(id){
+  const f=db.flows.find(x=>x.id===id);if(!f)return;xEditId=id;
+  $('xDate').value=f.date;$('xAcct').value=f.acct||'';$('xType').value=f.type;$('xAmt').value=f.amount;$('xMemo').value=f.memo||'';$('xCash').checked=!!f.cash;
+  $('xTitle').firstChild.textContent='입출금 수정 ';$('btnXAdd').textContent='수정 저장';$('btnXCancel').classList.remove('hide');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function delFlow(id){
+  const f=db.flows.find(x=>x.id===id);if(!f||!confirm(`삭제할까요?\n${f.date} ${acctLabel(f.acct)} ${f.type==='in'?'입금':'출금'} ${fmt(f.amount)}원`))return;
+  if(f.cash)flowCash(f,-1);
+  db.flows=db.flows.filter(x=>x.id!==id);save();render();flash('삭제했습니다'+(f.cash?` (예수금 ${fmtS(-flowAmt(f))}원 되돌림)`:''));
+}
+function toggleFlowCash(id){
+  const f=db.flows.find(x=>x.id===id);if(!f)return;
+  flowCash(f,f.cash?-1:1);f.cash=!f.cash;save();render();
+  const v=db.cash[f.acct||'']||0;
+  flash(`${f.type==='in'?'입금':'출금'} ${fmt(f.amount)}원 ${f.cash?'예수금에 반영했습니다':'예수금 반영을 취소했습니다'} · ${acctLabel(f.acct)} 예수금 ${fmt(v)}원`,v<0?'warn':'ok');
+}
+function renderFlow(){
+  const today=todayStr(),yr=today.slice(0,4),ym=today.slice(0,7);
+  const ins=a=>sumBy(a.filter(f=>f.type==='in'),f=>f.amount),outs=a=>sumBy(a.filter(f=>f.type==='out'),f=>f.amount);
+  const y=db.flows.filter(f=>f.date.startsWith(yr)),m=db.flows.filter(f=>f.date.startsWith(ym));
+  const net=ins(db.flows)-outs(db.flows);
+  $('flowKpi').innerHTML=[['올해 입금',fmt(ins(y))+'원',''],['올해 출금',fmt(outs(y))+'원',''],['올해 순입금',fmtS(ins(y)-outs(y))+'원',cls(ins(y)-outs(y))],['이번 달 순입금',fmtS(ins(m)-outs(m))+'원',cls(ins(m)-outs(m))],['기록 전체 순입금',fmtS(net)+'원',cls(net)]].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
+  const byM={};db.flows.forEach(f=>{const k=f.date.slice(0,7),o=byM[k]||(byM[k]={i:0,o:0});if(f.type==='in')o.i+=f.amount;else o.o+=f.amount});
+  const mk=Object.keys(byM).sort().reverse();
+  $('flowMonth').innerHTML=mk.length?`<table><tr><th>월</th><th>입금</th><th>출금</th><th>순입금</th></tr>${mk.map(k=>`<tr><td>${k}</td><td>${fmt(byM[k].i)}</td><td>${fmt(byM[k].o)}</td><td class="${cls(byM[k].i-byM[k].o)}">${fmtS(byM[k].i-byM[k].o)}</td></tr>`).join('')}</table>`:'<p class="note">기록된 입출금이 없습니다.</p>';
+  const list=[...db.flows].sort((a,b)=>b.date.localeCompare(a.date));
+  $('flowList').innerHTML=list.length?`<table><tr><th>날짜</th><th class="l">계좌</th><th>구분</th><th>금액</th><th>예수금</th><th class="l">메모</th><th></th></tr>${list.map(f=>`<tr><td class="l">${f.date}</td><td class="l">${esc(acctLabel(f.acct))}</td><td class="${f.type==='in'?'buy':'sell'}">${f.type==='in'?'입금':'출금'}</td><td>${fmt(f.amount)}</td><td>${f.cash?'<span class="dn">✓ 반영</span>':'<span class="note">–</span>'} <button class="sm" data-fc="${f.id}">${f.cash?'취소':'반영'}</button></td><td class="l note">${esc(f.memo)}</td><td><button class="sm" data-fe="${f.id}">수정</button> <button class="sm del" data-fd="${f.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 입출금이 없습니다.</p>';
+}
+function downloadFlowCsv(){
+  const rows=[...db.flows].sort((a,b)=>a.date.localeCompare(b.date)).map(f=>[f.date,acctLabel(f.acct),f.type==='in'?'입금':'출금',f.amount,f.cash?'Y':'N',f.memo||'']);
+  saveCsv(`입출금_${todayStr()}.csv`,['날짜','계좌','구분','금액(원)','예수금 반영','메모'],rows);
+  flash('입출금 내역을 CSV로 저장했습니다.');
+}
+
 // ---------- 마감 ----------
 function closeDay(date){
   date=date||$('fDate').value||todayStr();
@@ -760,6 +844,10 @@ function closeDay(date){
     dToday.forEach(d=>lines.push(`· 오늘 ${d.name} 세전 ${fmt(d.gross)}원 / 실수령 ${fmt(dNet(d))}원 [${acctLabel(d.acct)}]`));
     const expM=incomeTotals(incomeRows(c).filter(r=>r.y>0)).monthly,g=sumBy(dMonth,d=>d.gross);
     lines.push(`이번 달 누적: 세전 ${fmt(g)}원 / 실수령 ${fmt(sumBy(dMonth,dNet))}원`+(expM>0?` (월 예상 ${fmt(expM)}원 대비 ${(g/expM*100).toFixed(0)}%)`:''));
+  }
+  const fToday=db.flows.filter(f=>f.date===date);
+  if(fToday.length){
+    lines.push('','[입출금]',...fToday.map(f=>`· ${acctLabel(f.acct)} ${f.type==='in'?'입금':'출금'} ${fmt(f.amount)}원`+(f.memo?` [${f.memo}]`:'')));
   }
   const sums=acctSummary(c).filter(s=>s.hs.length||s.cash);
   if(sums.length){
@@ -960,6 +1048,7 @@ function render(){
   const lim=db.settings.isaLimit,over=Math.max(0,it.isaYear-lim);
   $('incomeNote').innerHTML=it.isaYear>0?`ISA 계좌 예상 연 분배금 ${fmt(it.isaYear)}원 → 비과세 한도 ${fmt(lim)}원의 ${(it.isaYear/lim*100).toFixed(0)}%`+(over>0?` · 초과 예상 ${fmt(over)}원에 ${db.settings.isaTax}% 분리과세 시 약 ${fmt(over*db.settings.isaTax/100)}원`:' · 한도 이내')+`<br>분배금만 단순 추정한 값입니다. ISA 안의 매매손익 통산, 실제 분배금 변동(커버드콜 등), 원천징수 시점은 반영하지 않습니다.`:'ISA 계좌 종목에 배당률을 입력하면 비과세 한도 대비 예상치가 나옵니다.';
   renderDiv(c);
+  renderFlow();
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -1034,7 +1123,7 @@ function applySettings(){
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  ['today','dash','hold','div','hist','pnl','rules','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['today','dash','hold','div','flow','hist','pnl','rules','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
 }
 $('tabs').addEventListener('click',e=>{if(e.target.dataset.t)tab(e.target.dataset.t)});
 $('btnAdd').onclick=addTrade;
@@ -1055,6 +1144,10 @@ $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',gu
 document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
 $('btnDashCopy').onclick=async()=>{try{await navigator.clipboard.writeText(dashText(dashData(compute())));flash('대시보드 요약을 복사했습니다')}catch(e){flash('복사 실패: 브라우저가 클립보드를 막았습니다','warn')}};
+$('btnXAdd').onclick=addFlow;
+$('btnXCancel').onclick=clearFlowForm;
+$('xForm').addEventListener('keydown',e=>{if(e.key==='Enter')addFlow()});
+$('btnXCsv').onclick=downloadFlowCsv;
 $('btnDAdd').onclick=addDiv;
 $('btnDCancel').onclick=clearDivForm;
 $('dForm').addEventListener('keydown',e=>{if(e.key==='Enter')addDiv()});
@@ -1075,6 +1168,9 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.de)editDiv(e.target.dataset.de);
   if(e.target.dataset.dd)delDiv(e.target.dataset.dd);
   if(e.target.dataset.dc)toggleDivCash(e.target.dataset.dc);
+  if(e.target.dataset.fe)editFlow(e.target.dataset.fe);
+  if(e.target.dataset.fd)delFlow(e.target.dataset.fd);
+  if(e.target.dataset.fc)toggleFlowCash(e.target.dataset.fc);
   if(e.target.dataset.tc)toggleTradeCash(e.target.dataset.tc);
   if(e.target.dataset.mdel){const i=+e.target.dataset.mdel;if(confirm(`'${db.macro[i].item||'(빈 항목)'}' 점검 항목을 삭제할까요?`)){db.macro.splice(i,1);save();renderMacro();render()}}
 });
@@ -1120,7 +1216,7 @@ $('btnWipe').onclick=()=>{
   if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
   db=JSON.parse(JSON.stringify(defaults));save();applySettings();render();flash('삭제했습니다');
 };
-$('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('dAcct').value=ACCTS[1];$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();checkForm();render();
+$('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('dAcct').value=ACCTS[1];$('xDate').value=todayStr();$('xAcct').value=ACCTS[0];$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();checkForm();render();
 window.__ledger={compute,parsePaste,parseInit,get db(){return db}};
 })();
 </script>
