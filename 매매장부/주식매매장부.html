@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주식 매매 관리 장부</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1d2330;--sub:#6b7380;--line:#e3e6eb;--pri:#1f5eff;--pri-tx:#fff;--up:#d6293a;--dn:#1e6bd6;--warn:#b26a00;--ok:#16794a}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--tx:#e8ebf0;--sub:#9aa3b2;--line:#2c3340;--pri:#4a7dff;--up:#ff6b78;--dn:#6aa3ff;--warn:#e0a040;--ok:#4cc790}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 -apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+header{padding:14px 16px 0;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin:0 0 10px}
+main{max-width:1100px;margin:0 auto;padding:0 16px 40px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--tx);padding:8px 14px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--pri)}
+button.pri{background:var(--pri);color:var(--pri-tx);border-color:var(--pri);font-weight:700}
+button.big{padding:12px 22px;font-size:16px}
+button.sm{padding:3px 9px;font-size:13px}
+button.del{color:var(--up)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.tabs button{border:none;border-bottom:3px solid transparent;border-radius:0;background:none;padding:9px 14px;white-space:nowrap}
+.tabs button.on{border-bottom-color:var(--pri);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--sub);margin-bottom:2px}
+input,select,textarea{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--tx)}
+textarea{min-height:110px;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--bg);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--sub)}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:14px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:12px;color:var(--sub);font-weight:600}
+th:first-child,td:first-child,.l{text-align:left}
+.up{color:var(--up)}.dn{color:var(--dn)}.buy{color:var(--up)}.sell{color:var(--dn)}
+.msg{padding:9px 12px;border-radius:8px;margin-bottom:12px;font-size:14px}
+.msg.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.msg.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+pre{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:12px;font-size:13px;margin:0 0 10px}
+.hide{display:none}
+.note{font-size:12px;color:var(--sub)}
+</style>
+</head>
+<body>
+<header><h1>📒 주식 매매 관리 장부</h1></header>
+<main>
+<div class="bar">
+  <button class="pri big" id="btnClose">✅ 오늘 마감 (한 번에)</button>
+  <button id="btnBackup">💾 백업 저장</button>
+  <button id="btnCsv">📊 엑셀(CSV) 저장</button>
+  <button id="btnRestore">📂 백업 불러오기</button>
+  <input type="file" id="fileRestore" accept=".json" class="hide">
+</div>
+<div id="msg"></div>
+<div class="tabs" id="tabs">
+  <button data-t="today" class="on">오늘 입력</button>
+  <button data-t="hold">보유 현황</button>
+  <button data-t="hist">거래 내역</button>
+  <button data-t="pnl">기간 손익</button>
+  <button data-t="set">설정</button>
+</div>
+
+<section id="t-today">
+  <div class="card">
+    <h2 id="formTitle">매매 입력</h2>
+    <div class="grid">
+      <div><label>날짜</label><input type="date" id="fDate"></div>
+      <div><label>구분</label><select id="fSide"><option value="buy">매수</option><option value="sell">매도</option></select></div>
+      <div><label>종목명</label><input id="fName" list="nameList" placeholder="예: KODEX 미국고배당"></div>
+      <div><label>종류</label><select id="fKind"><option value="stock">주식</option><option value="etf">ETF</option></select></div>
+      <div><label>수량</label><input type="number" id="fQty" min="0" step="any" inputmode="decimal"></div>
+      <div><label>단가(원)</label><input type="number" id="fPrice" min="0" step="any" inputmode="decimal"></div>
+      <div><label>수수료(비우면 자동)</label><input type="number" id="fFee" min="0" step="any"></div>
+      <div><label>세금(비우면 자동)</label><input type="number" id="fTax" min="0" step="any"></div>
+      <div><label>계좌</label><input id="fAcct" list="acctList" placeholder="ISA/일반/연금"></div>
+      <div style="grid-column:span 2"><label>메모(매매 사유·손절 기준)</label><input id="fMemo"></div>
+    </div>
+    <datalist id="nameList"></datalist><datalist id="acctList"></datalist>
+    <div class="bar" style="margin:12px 0 0">
+      <button class="pri" id="btnAdd">추가 (Enter)</button>
+      <button id="btnCancel" class="hide">수정 취소</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>체결내역 붙여넣기 (증권사 화면/엑셀에서 복사)</h2>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 순서 예) <code>2026-10-23 KODEX미국고배당 매수 100 12500</code> — 탭·쉼표·공백 구분 모두 가능. 수량 뒤에 단가가 오면 됩니다.</p>
+    <textarea id="paste" placeholder="2026-10-23	삼성전자	매수	10	71000"></textarea>
+    <div class="bar" style="margin:10px 0 0">
+      <button id="btnParse">미리보기</button>
+      <button class="pri" id="btnPasteClose">반영하고 오늘 마감</button>
+    </div>
+    <div id="pasteOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>오늘 거래 <span class="note" id="todayLabel"></span></h2>
+    <div class="tw" id="todayTable"></div>
+  </div>
+  <div class="card hide" id="reportCard">
+    <h2>마감 리포트</h2>
+    <pre id="report"></pre>
+    <div class="bar" style="margin:0"><button id="btnCopy">📋 복사 (카톡·메모용)</button></div>
+  </div>
+</section>
+
+<section id="t-hold" class="hide">
+  <div class="card"><div class="kpis" id="holdKpi"></div></div>
+  <div class="card">
+    <h2>보유 종목 <span class="note">현재가를 입력하면 평가손익이 계산됩니다 (자동 시세 조회는 하지 않음)</span></h2>
+    <div class="tw" id="holdTable"></div>
+  </div>
+</section>
+
+<section id="t-hist" class="hide">
+  <div class="card">
+    <div class="grid" style="margin-bottom:10px">
+      <div><label>시작일</label><input type="date" id="hFrom"></div>
+      <div><label>종료일</label><input type="date" id="hTo"></div>
+      <div><label>종목 검색</label><input id="hQ"></div>
+    </div>
+    <div class="tw" id="histTable"></div>
+  </div>
+</section>
+
+<section id="t-pnl" class="hide">
+  <div class="card"><h2>월별 실현손익 (이동평균법, 비용 차감 후)</h2><div class="tw" id="pnlMonth"></div></div>
+  <div class="card"><h2>종목별 실현손익</h2><div class="tw" id="pnlName"></div></div>
+</section>
+
+<section id="t-set" class="hide">
+  <div class="card">
+    <h2>수수료·세율 (매매 시 자동 계산에 사용)</h2>
+    <div class="grid">
+      <div><label>매수·매도 수수료율(%)</label><input type="number" id="sFee" step="any"></div>
+      <div><label>주식 매도 거래세(%) *</label><input type="number" id="sTaxStock" step="any"></div>
+      <div><label>ETF 매도 거래세(%)</label><input type="number" id="sTaxEtf" step="any"></div>
+    </div>
+    <p class="note">* 세율은 임시 기본값입니다. 증권사 체결내역의 실제 수수료·세금과 다르면 여기서 고치거나 거래 입력 시 직접 적으세요. 해외 직접투자·양도세·배당소득세는 이 장부에서 계산하지 않습니다.</p>
+    <div class="bar" style="margin:0"><button class="pri" id="btnSaveSet">설정 저장</button></div>
+  </div>
+  <div class="card">
+    <h2>데이터 관리</h2>
+    <p class="note">데이터는 이 브라우저 안에만 저장됩니다. 브라우저 기록 삭제·PC 교체 시 사라지므로 <b>백업 저장</b>(.json) 파일을 클라우드 폴더(OneDrive 등)에 두세요. 마감 버튼을 누르면 백업이 자동으로 내려받아집니다.</p>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx)"><input type="checkbox" id="sAuto" style="width:auto"> 마감 시 백업 파일 자동 저장</label>
+    <div class="bar" style="margin:10px 0 0"><button class="del" id="btnWipe">전체 데이터 삭제</button></div>
+  </div>
+</section>
+</main>
+
+<script>
+(()=>{
+'use strict';
+const KEY='stockLedger.v1';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>Math.round(n).toLocaleString('ko-KR');
+const fmtS=n=>(n>0?'+':'')+fmt(n);
+const cls=n=>n>0?'up':n<0?'dn':'';
+const pct=n=>(n>0?'+':'')+n.toFixed(2)+'%';
+const todayStr=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const defaults={trades:[],prices:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true}};
+let db=load();
+let editId=null;
+
+function load(){
+  try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return {...defaults,...r,settings:{...defaults.settings,...r.settings}}}catch(e){}
+  return JSON.parse(JSON.stringify(defaults));
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
+}
+function flash(t,k='ok'){$('msg').innerHTML=`<div class="msg ${k}">${esc(t)}</div>`;}
+
+// ---------- 계산 ----------
+function autoFee(amt){return Math.round(amt*db.settings.fee/100)}
+function autoTax(side,kind,amt){
+  if(side!=='sell')return 0;
+  return Math.round(amt*(kind==='etf'?db.settings.taxEtf:db.settings.taxStock)/100);
+}
+// 거래를 시간순으로 재생해 보유/실현손익 계산 (이동평균법)
+function compute(){
+  const sorted=db.trades.map((t,i)=>({t,i})).sort((a,b)=>a.t.date.localeCompare(b.t.date)||a.i-b.i).map(x=>x.t);
+  const pos={};const rows={};const errors=[];
+  for(const t of sorted){
+    const p=pos[t.name]||(pos[t.name]={name:t.name,qty:0,cost:0,kind:t.kind,realized:0,fees:0});
+    p.kind=t.kind;p.fees+=t.fee+t.tax;
+    const amt=t.qty*t.price;
+    if(t.side==='buy'){p.qty+=t.qty;p.cost+=amt+t.fee+t.tax;rows[t.id]={realized:null}}
+    else{
+      let q=t.qty;
+      if(q>p.qty+1e-9){errors.push(`${t.date} ${t.name}: 보유(${p.qty})보다 많이 매도(${t.qty}) — 입력 누락 확인`);q=p.qty}
+      const avg=p.qty>0?p.cost/p.qty:0;
+      const basis=avg*q;
+      const share=t.qty>0?q/t.qty:0; // 보유분을 넘는 매도는 손익에서 제외(입력 누락 경고만)
+      const proceeds=(amt-t.fee-t.tax)*share;
+      const real=proceeds-basis;
+      p.qty-=q;p.cost-=basis;if(p.qty<1e-9){p.qty=0;p.cost=0}
+      p.realized+=real;rows[t.id]={realized:real,basis,rate:basis>0?real/basis*100:0,unmatched:q<t.qty-1e-9};
+    }
+  }
+  return {pos,rows,errors,sorted};
+}
+
+// ---------- 입력 ----------
+function readForm(){
+  const side=$('fSide').value,kind=$('fKind').value;
+  const name=$('fName').value.trim(),qty=parseFloat($('fQty').value),price=parseFloat($('fPrice').value);
+  if(!name)return err('종목명을 입력하세요');
+  if(!(qty>0))return err('수량을 확인하세요');
+  if(!(price>=0))return err('단가를 확인하세요');
+  const amt=qty*price;
+  const f=$('fFee').value,x=$('fTax').value;
+  return {id:editId||uid(),date:$('fDate').value||todayStr(),side,kind,name,qty,price,
+    fee:f===''?autoFee(amt):parseFloat(f),tax:x===''?autoTax(side,kind,amt):parseFloat(x),
+    acct:$('fAcct').value.trim(),memo:$('fMemo').value.trim()};
+}
+function err(m){flash(m,'warn');return null}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+function addTrade(){
+  const t=readForm();if(!t)return;
+  if(editId){const i=db.trades.findIndex(x=>x.id===editId);db.trades[i]=t}else db.trades.push(t);
+  const wasEdit=!!editId;editId=null;save();
+  clearForm();flash(`${wasEdit?'수정':'추가'}: ${t.name} ${t.side==='buy'?'매수':'매도'} ${fmt(t.qty)}주 @ ${fmt(t.price)}`);
+  render();$('fName').focus();
+}
+function clearForm(){
+  ['fName','fQty','fPrice','fFee','fTax','fMemo'].forEach(i=>$(i).value='');
+  $('formTitle').textContent='매매 입력';$('btnAdd').textContent='추가 (Enter)';$('btnCancel').classList.add('hide');
+}
+function editTrade(id){
+  const t=db.trades.find(x=>x.id===id);if(!t)return;editId=id;
+  $('fDate').value=t.date;$('fSide').value=t.side;$('fKind').value=t.kind;$('fName').value=t.name;
+  $('fQty').value=t.qty;$('fPrice').value=t.price;$('fFee').value=t.fee;$('fTax').value=t.tax;
+  $('fAcct').value=t.acct||'';$('fMemo').value=t.memo||'';
+  $('formTitle').textContent='거래 수정';$('btnAdd').textContent='수정 저장';$('btnCancel').classList.remove('hide');
+  tab('today');window.scrollTo({top:0,behavior:'smooth'});
+}
+function delTrade(id){
+  const t=db.trades.find(x=>x.id===id);if(!t||!confirm(`삭제할까요?\n${t.date} ${t.name} ${t.side==='buy'?'매수':'매도'} ${t.qty}주`))return;
+  db.trades=db.trades.filter(x=>x.id!==id);save();render();flash('삭제했습니다');
+}
+
+// ---------- 붙여넣기 ----------
+function parsePaste(text){
+  const out=[],bad=[];
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;
+    const toks=(line.includes('\t')?line.split('\t'):line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s{2,}|\s/)).map(s=>s.trim()).filter(Boolean);
+    let date=null,side=null,name=[],nums=[];
+    for(const k of toks){
+      const d=k.match(/^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/);
+      if(d&&!date){date=`${d[1]}-${d[2].padStart(2,'0')}-${d[3].padStart(2,'0')}`;continue}
+      if(/매수|buy/i.test(k)&&!side){side='buy';continue}
+      if(/매도|sell/i.test(k)&&!side){side='sell';continue}
+      const n=k.replace(/[,원주]/g,'');
+      if(/^\d+(\.\d+)?$/.test(n)){nums.push(parseFloat(n));continue}
+      name.push(k);
+    }
+    if(!side||!name.length||nums.length<2){bad.push(line);continue}
+    const nm=name.join(' ');
+    const kind=/ETF|KODEX|TIGER|ACE|SOL|RISE|KBSTAR|HANARO|PLUS|ARIRANG/i.test(nm)?'etf':'stock';
+    const [qty,price,fee,tax]=nums;const amt=qty*price;
+    out.push({id:uid(),date:date||todayStr(),side,kind,name:nm,qty,price,
+      fee:fee??autoFee(amt),tax:tax??autoTax(side,kind,amt),acct:'',memo:''});
+  }
+  return {out,bad};
+}
+let pending=[];
+function previewPaste(){
+  const {out,bad}=parsePaste($('paste').value);pending=out;
+  let h='';
+  if(out.length)h+=`<div class="tw"><table><tr><th>날짜</th><th>구분</th><th>종목</th><th>수량</th><th>단가</th><th>수수료</th><th>세금</th></tr>${out.map(t=>`<tr><td>${t.date}</td><td class="${t.side}">${t.side==='buy'?'매수':'매도'}</td><td class="l">${esc(t.name)}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td></tr>`).join('')}</table></div>`;
+  if(bad.length)h+=`<div class="msg warn">읽지 못한 줄 ${bad.length}건:<br>${bad.map(esc).join('<br>')}</div>`;
+  $('pasteOut').innerHTML=h;return {out,bad};
+}
+function applyPaste(){
+  const {out,bad}=previewPaste();
+  if(!out.length){flash('반영할 내역이 없습니다','warn');return false}
+  if(bad.length&&!confirm(`읽지 못한 줄 ${bad.length}건은 빼고 ${out.length}건만 반영할까요?`))return false;
+  db.trades.push(...out);save();$('paste').value='';$('pasteOut').innerHTML='';pending=[];
+  return out.length;
+}
+
+// ---------- 마감 ----------
+function closeDay(date){
+  date=date||$('fDate').value||todayStr();
+  const c=compute();
+  const day=c.sorted.filter(t=>t.date===date);
+  const buys=day.filter(t=>t.side==='buy'),sells=day.filter(t=>t.side==='sell');
+  const sum=a=>a.reduce((s,t)=>s+t.qty*t.price,0);
+  const cost=day.reduce((s,t)=>s+t.fee+t.tax,0);
+  const realized=sells.reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
+  const lines=[`[${date} 매매 마감]`];
+  lines.push(`매수 ${buys.length}건 ${fmt(sum(buys))}원 / 매도 ${sells.length}건 ${fmt(sum(sells))}원`);
+  lines.push(`수수료·세금 ${fmt(cost)}원 / 당일 실현손익 ${fmtS(realized)}원(비용 차감 후)`);
+  if(day.length){lines.push('');day.forEach(t=>{
+    const r=c.rows[t.id];
+    lines.push(`· ${t.side==='buy'?'매수':'매도'} ${t.name} ${fmt(t.qty)}주 @ ${fmt(t.price)}`+(r&&r.realized!==null?(r.unmatched?' → 손익 계산 불가(보유 수량 부족)':` → 손익 ${fmtS(r.realized)} (${pct(r.rate)})`):'')+(t.memo?` [${t.memo}]`:''));
+  })}
+  const month=date.slice(0,7),year=date.slice(0,4);
+  const mReal=c.sorted.filter(t=>t.side==='sell'&&t.date.startsWith(month)&&t.date<=date).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
+  const yReal=c.sorted.filter(t=>t.side==='sell'&&t.date.startsWith(year)&&t.date<=date).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
+  lines.push('',`이번 달 누적 실현손익 ${fmtS(mReal)}원 / 올해 누적 ${fmtS(yReal)}원`);
+  const held=Object.values(c.pos).filter(p=>p.qty>0);
+  if(held.length){
+    let tc=0,tv=0,allPriced=true;
+    lines.push('','[보유 현황]');
+    held.forEach(p=>{
+      const px=db.prices[p.name];tc+=p.cost;
+      let s=`· ${p.name} ${fmt(p.qty)}주 평단 ${fmt(p.cost/p.qty)}`;
+      if(px>0){const v=px*p.qty;tv+=v;s+=` / 현재가 ${fmt(px)} / 평가손익 ${fmtS(v-p.cost)} (${pct((v-p.cost)/p.cost*100)})`}else allPriced=false;
+      lines.push(s);
+    });
+    lines.push(`매입원가 합계 ${fmt(tc)}원`+(allPriced?` / 평가금액 ${fmt(tv)}원 / 평가손익 ${fmtS(tv-tc)}원`:' (현재가 미입력 종목 있음)'));
+  }
+  if(c.errors.length)lines.push('','⚠ 확인 필요',...c.errors.map(e=>'· '+e));
+  const text=lines.join('\n');
+  db.closes=db.closes.filter(x=>x.date!==date);db.closes.push({date,text,realized,cost,at:new Date().toISOString()});
+  save();
+  $('report').textContent=text;$('reportCard').classList.remove('hide');
+  tab('today');$('reportCard').scrollIntoView({behavior:'smooth'});
+  render();
+  if(db.settings.auto)downloadBackup(true);
+  flash(`${date} 마감 완료`+(db.settings.auto?' · 백업 파일을 내려받았습니다':'')+(c.errors.length?` · 확인 필요 ${c.errors.length}건`:''),c.errors.length?'warn':'ok');
+}
+
+// ---------- 렌더 ----------
+function tradeRows(list,c,withBtn=true){
+  if(!list.length)return '<p class="note">거래가 없습니다.</p>';
+  return `<table><tr><th>날짜</th><th>구분</th><th class="l">종목</th><th>수량</th><th>단가</th><th>금액</th><th>수수료</th><th>세금</th><th>실현손익</th><th class="l">메모</th>${withBtn?'<th></th>':''}</tr>${list.map(t=>{
+    const r=c.rows[t.id];
+    return `<tr><td>${t.date}</td><td class="${t.side}">${t.side==='buy'?'매수':'매도'}</td><td class="l">${esc(t.name)}${t.acct?` <span class="note">${esc(t.acct)}</span>`:''}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td><td class="${cls(r?.realized||0)}">${r&&r.realized!==null?(r.unmatched?'⚠ 수량 부족':fmtS(r.realized)+` (${pct(r.rate)})`):'-'}</td><td class="l note">${esc(t.memo)}</td>${withBtn?`<td><button class="sm" data-e="${t.id}">수정</button> <button class="sm del" data-d="${t.id}">삭제</button></td>`:''}</tr>`}).join('')}</table>`;
+}
+function render(){
+  const c=compute();
+  const d=$('fDate').value||todayStr();
+  $('todayLabel').textContent=d;
+  $('todayTable').innerHTML=tradeRows(c.sorted.filter(t=>t.date===d),c);
+  $('nameList').innerHTML=[...new Set(db.trades.map(t=>t.name))].map(n=>`<option value="${esc(n)}">`).join('');
+  $('acctList').innerHTML=[...new Set(db.trades.map(t=>t.acct).filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join('');
+  // 보유
+  const held=Object.values(c.pos).filter(p=>p.qty>0);
+  let tc=0,tv=0,pricedCost=0;
+  held.forEach(p=>{tc+=p.cost;const px=db.prices[p.name];if(px>0){tv+=px*p.qty;pricedCost+=p.cost}});
+  const totReal=Object.values(c.pos).reduce((s,p)=>s+p.realized,0);
+  $('holdKpi').innerHTML=[['매입원가 합계',fmt(tc)+'원',''],['평가금액(입력된 종목)',tv?fmt(tv)+'원':'-',''],['평가손익',tv?fmtS(tv-pricedCost)+'원':'-',cls(tv-pricedCost)],['누적 실현손익',fmtS(totReal)+'원',cls(totReal)],['보유 종목',held.length+'개','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
+  $('holdTable').innerHTML=held.length?`<table><tr><th>종목</th><th>수량</th><th>평균단가</th><th>매입원가</th><th>현재가(입력)</th><th>평가금액</th><th>평가손익</th><th>수익률</th></tr>${held.map(p=>{
+    const px=db.prices[p.name]||'',v=px?px*p.qty:null;
+    return `<tr><td class="l">${esc(p.name)}</td><td>${fmt(p.qty)}</td><td>${fmt(p.cost/p.qty)}</td><td>${fmt(p.cost)}</td><td><input type="number" class="px" data-n="${esc(p.name)}" value="${px}" style="width:100px;text-align:right"></td><td>${v?fmt(v):'-'}</td><td class="${cls(v-p.cost)}">${v?fmtS(v-p.cost):'-'}</td><td class="${cls(v-p.cost)}">${v?pct((v-p.cost)/p.cost*100):'-'}</td></tr>`}).join('')}</table>`:'<p class="note">보유 종목이 없습니다.</p>';
+  // 내역
+  const from=$('hFrom').value,to=$('hTo').value,q=$('hQ').value.trim().toLowerCase();
+  const list=c.sorted.filter(t=>(!from||t.date>=from)&&(!to||t.date<=to)&&(!q||t.name.toLowerCase().includes(q))).reverse();
+  $('histTable').innerHTML=tradeRows(list,c);
+  // 손익
+  const byM={},byN={};
+  c.sorted.filter(t=>t.side==='sell').forEach(t=>{
+    const r=c.rows[t.id].realized;
+    (byM[t.date.slice(0,7)]||(byM[t.date.slice(0,7)]={n:0,r:0})).n++;byM[t.date.slice(0,7)].r+=r;
+    (byN[t.name]||(byN[t.name]={n:0,r:0})).n++;byN[t.name].r+=r;
+  });
+  const tbl=(o,h)=>Object.keys(o).length?`<table><tr><th>${h}</th><th>매도 건수</th><th>실현손익</th></tr>${Object.entries(o).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v])=>`<tr><td class="l">${esc(k)}</td><td>${v.n}</td><td class="${cls(v.r)}">${fmtS(v.r)}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td>${Object.values(o).reduce((s,v)=>s+v.n,0)}</td><td class="${cls(Object.values(o).reduce((s,v)=>s+v.r,0))}"><b>${fmtS(Object.values(o).reduce((s,v)=>s+v.r,0))}</b></td></tr></table>`:'<p class="note">매도 내역이 없습니다.</p>';
+  $('pnlMonth').innerHTML=tbl(byM,'월');
+  $('pnlName').innerHTML=tbl(Object.fromEntries(Object.entries(byN).sort((a,b)=>b[1].r-a[1].r)),'종목');
+  if(c.errors.length&&!$('msg').innerHTML)flash('확인 필요: '+c.errors[0],'warn');
+}
+
+// ---------- 백업/내보내기 ----------
+function download(name,mime,body){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([body],{type:mime}));a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function downloadBackup(quiet){
+  download(`매매장부_백업_${todayStr()}.json`,'application/json',JSON.stringify(db,null,1));
+  if(!quiet)flash('백업 파일을 저장했습니다. 클라우드 폴더에 보관하세요.');
+}
+function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function downloadCsv(){
+  const c=compute();
+  const head=['날짜','구분','종목','종류','계좌','수량','단가','거래금액','수수료','세금','실현손익','수익률(%)','메모'];
+  const rows=c.sorted.map(t=>{const r=c.rows[t.id];return [t.date,t.side==='buy'?'매수':'매도',t.name,t.kind==='etf'?'ETF':'주식',t.acct||'',t.qty,t.price,Math.round(t.qty*t.price),t.fee,t.tax,r&&r.realized!==null?Math.round(r.realized):'',r&&r.realized!==null?r.rate.toFixed(2):'',t.memo||'']});
+  download(`매매장부_${todayStr()}.csv`,'text/csv;charset=utf-8','﻿'+[head,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n'));
+  flash('엑셀에서 열 수 있는 CSV로 저장했습니다.');
+}
+function restore(file){
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const r=JSON.parse(fr.result);if(!Array.isArray(r.trades))throw 0;
+      if(!confirm(`백업의 거래 ${r.trades.length}건으로 현재 장부(${db.trades.length}건)를 덮어씁니다. 진행할까요?`))return;
+      db={...defaults,...r,settings:{...defaults.settings,...r.settings}};save();applySettings();render();flash('백업을 불러왔습니다');
+    }catch(e){flash('백업 파일 형식이 올바르지 않습니다','warn')}
+  };fr.readAsText(file);
+}
+
+// ---------- 설정/탭/이벤트 ----------
+function applySettings(){
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;
+}
+function tab(t){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  ['today','hold','hist','pnl','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+}
+$('tabs').addEventListener('click',e=>{if(e.target.dataset.t)tab(e.target.dataset.t)});
+$('btnAdd').onclick=addTrade;
+$('btnCancel').onclick=()=>{editId=null;clearForm()};
+document.querySelector('#t-today .grid').addEventListener('keydown',e=>{if(e.key==='Enter')addTrade()});
+$('btnClose').onclick=()=>{
+  if($('paste').value.trim()&&!applyPaste())return;
+  closeDay();
+};
+$('btnParse').onclick=previewPaste;
+$('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){flash(`${n}건 반영`);closeDay()}};
+$('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);flash('복사했습니다')}catch(e){flash('복사 실패: 직접 선택해서 복사하세요','warn')}};
+$('btnBackup').onclick=()=>downloadBackup();
+$('btnCsv').onclick=downloadCsv;
+$('btnRestore').onclick=()=>$('fileRestore').click();
+$('fileRestore').onchange=e=>{if(e.target.files[0])restore(e.target.files[0]);e.target.value=''};
+$('fDate').onchange=render;
+['hFrom','hTo','hQ'].forEach(i=>$(i).oninput=render);
+document.body.addEventListener('click',e=>{
+  if(e.target.dataset.e)editTrade(e.target.dataset.e);
+  if(e.target.dataset.d)delTrade(e.target.dataset.d);
+});
+document.body.addEventListener('change',e=>{
+  if(e.target.classList.contains('px')){
+    const v=parseFloat(e.target.value);
+    if(v>0)db.prices[e.target.dataset.n]=v;else delete db.prices[e.target.dataset.n];
+    save();render();
+  }
+});
+$('btnSaveSet').onclick=()=>{
+  db.settings.fee=parseFloat($('sFee').value)||0;db.settings.taxStock=parseFloat($('sTaxStock').value)||0;
+  db.settings.taxEtf=parseFloat($('sTaxEtf').value)||0;db.settings.auto=$('sAuto').checked;save();flash('설정을 저장했습니다');
+};
+$('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
+$('btnWipe').onclick=()=>{
+  if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
+  db=JSON.parse(JSON.stringify(defaults));save();applySettings();render();flash('삭제했습니다');
+};
+$('fDate').value=todayStr();applySettings();render();
+window.__ledger={compute,parsePaste,get db(){return db},set db(v){db=v}};
+})();
+</script>
+</body>
+</html>
