@@ -102,15 +102,16 @@ h3{font-size:14px;margin:14px 0 6px}
       <summary id="ruleSum" style="cursor:pointer;font-size:14px"></summary>
       <div class="tw" id="ruleCheck" style="margin-top:8px"></div>
     </details>
-    <div class="bar" style="margin:12px 0 0">
+    <div class="bar" style="margin:12px 0 0;align-items:center">
       <button class="pri" id="btnAdd">추가 (Enter)</button>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin:0"><input type="checkbox" id="fCash" checked style="width:auto"> 예수금에 반영 (매수 −, 매도 +, 아래 붙여넣기에도 적용)</label>
       <button id="btnCancel" class="hide">수정 취소</button>
     </div>
   </div>
 
   <div class="card">
     <h2>체결내역 붙여넣기 (증권사 화면/엑셀에서 복사)</h2>
-    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-23 삼성전자 매도 4 285500</code> — 탭·쉼표·공백 구분 모두 가능, 수량 뒤에 단가. 줄 안에 <code>종합위탁</code>·<code>ISA</code>가 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 진입근거·손절가는 붙여넣기 후 매매일지 탭에서 수정하세요.</p>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-23 삼성전자 매도 4 285500</code> — 탭·쉼표·공백 구분 모두 가능, 수량 뒤에 단가. 줄 안에 <code>종합위탁</code>·<code>ISA</code>가 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 위의 "예수금에 반영" 체크가 붙여넣기에도 적용됩니다. 진입근거·손절가는 붙여넣기 후 매매일지 탭에서 수정하세요.</p>
     <textarea id="paste" placeholder="2026-10-23	삼성전자	매수	10	285500"></textarea>
     <div class="bar" style="margin:10px 0 0">
       <button id="btnParse">미리보기</button>
@@ -415,24 +416,27 @@ function readForm(){
   return {id:editId||uid(),date:$('fDate').value||todayStr(),acct:$('fAcct').value.trim(),side,kind,name,qty,price,
     type:$('fType').value.trim(),reason:$('fReason').value.trim(),stop:num('fStop'),target:num('fTarget'),
     fee:f===''?autoFee(amt):parseFloat(f),tax:x===''?autoTax(side,kind,amt):parseFloat(x),
-    memo:$('fMemo').value.trim()};
+    memo:$('fMemo').value.trim(),cash:$('fCash').checked};
 }
 function err(m){flash(m,'warn');return null}
 
 function addTrade(){
   const t=readForm();if(!t)return;
-  if(editId){const i=db.trades.findIndex(x=>x.id===editId);db.trades[i]=t}else db.trades.push(t);
+  if(editId){const i=db.trades.findIndex(x=>x.id===editId);if(db.trades[i].cash)cashDeltaTrade(db.trades[i],-1);db.trades[i]=t}else db.trades.push(t);
+  if(t.cash)cashDeltaTrade(t,1);
   if(t.side==='buy'&&(t.stop>0||t.target>0)){
     const m=db.meta[t.name]||(db.meta[t.name]={});
     if(t.stop>0)m.stop=t.stop;if(t.target>0)m.target=t.target;
   }
   const wasEdit=!!editId;editId=null;save();
   Object.keys(chkManual).forEach(k=>delete chkManual[k]);
-  clearForm();flash(`${wasEdit?'수정':'추가'}: ${t.name} ${t.side==='buy'?'매수':'매도'} ${fmt(t.qty)}주 @ ${fmt(t.price)}`);
+  clearForm();
+  const neg=t.cash&&(db.cash[t.acct||'']||0)<0;
+  flash(`${wasEdit?'수정':'추가'}: ${t.name} ${t.side==='buy'?'매수':'매도'} ${fmt(t.qty)}주 @ ${fmt(t.price)}`+(t.cash?` · ${acctLabel(t.acct)} 예수금 ${fmt(db.cash[t.acct||'']||0)}원`+(neg?' ⚠ 마이너스 — 예수금 입력을 확인하세요':''):' · 예수금에는 반영하지 않음'),neg?'warn':'ok');
   render();$('fName').focus();
 }
 function clearForm(){
-  ['fName','fType','fQty','fPrice','fStop','fTarget','fFee','fTax','fReason','fMemo'].forEach(i=>$(i).value='');
+  ['fName','fType','fQty','fPrice','fStop','fTarget','fFee','fTax','fReason','fMemo'].forEach(i=>$(i).value='');$('fCash').checked=true;
   $('formTitle').textContent='매매 입력 · 매매일지 기록';$('btnAdd').textContent='추가 (Enter)';$('btnCancel').classList.add('hide');
   checkForm();
 }
@@ -440,13 +444,21 @@ function editTrade(id){
   const t=db.trades.find(x=>x.id===id);if(!t)return;editId=id;
   $('fDate').value=t.date;$('fAcct').value=t.acct||'';$('fSide').value=t.side;$('fType').value=t.type||'';$('fKind').value=t.kind;$('fName').value=t.name;
   $('fQty').value=t.qty;$('fPrice').value=t.price;$('fStop').value=t.stop||'';$('fTarget').value=t.target||'';
-  $('fFee').value=t.fee;$('fTax').value=t.tax;$('fReason').value=t.reason||'';$('fMemo').value=t.memo||'';
+  $('fFee').value=t.fee;$('fTax').value=t.tax;$('fReason').value=t.reason||'';$('fMemo').value=t.memo||'';$('fCash').checked=!!t.cash;
   $('formTitle').textContent='거래 수정';$('btnAdd').textContent='수정 저장';$('btnCancel').classList.remove('hide');
   tab('today');checkForm();window.scrollTo({top:0,behavior:'smooth'});
 }
 function delTrade(id){
   const t=db.trades.find(x=>x.id===id);if(!t||!confirm(`삭제할까요?\n${t.date} ${t.name} ${t.side==='buy'?'매수':'매도'} ${t.qty}주`))return;
-  db.trades=db.trades.filter(x=>x.id!==id);save();render();flash('삭제했습니다');
+  if(t.cash)cashDeltaTrade(t,-1);
+  db.trades=db.trades.filter(x=>x.id!==id);save();render();flash('삭제했습니다'+(t.cash?` (예수금 ${fmtS(-tradeCash(t))}원 되돌림)`:''));
+}
+// 이미 기록한 거래의 예수금 반영 여부를 건별로 바꾼다
+function toggleTradeCash(id){
+  const t=db.trades.find(x=>x.id===id);if(!t||t.type==='기초')return;
+  cashDeltaTrade(t,t.cash?-1:1);t.cash=!t.cash;save();render();
+  const v=db.cash[t.acct||'']||0;
+  flash(`${t.name} ${t.side==='buy'?'매수':'매도'} ${fmt(Math.abs(tradeCash(t)))}원 ${t.cash?'예수금에 반영했습니다':'예수금 반영을 취소했습니다'} · ${acctLabel(t.acct)} 예수금 ${fmt(v)}원`,v<0?'warn':'ok');
 }
 // ---------- 투자원칙 ----------
 const chkManual={};
@@ -553,6 +565,8 @@ function applyPaste(){
   const {out,bad}=previewPaste();
   if(!out.length){flash('반영할 내역이 없습니다','warn');return false}
   if(bad.length&&!confirm(`읽지 못한 줄 ${bad.length}건은 빼고 ${out.length}건만 반영할까요?`))return false;
+  const on=$('fCash').checked;
+  out.forEach(t=>{t.cash=on;if(on)cashDeltaTrade(t,1)});
   db.trades.push(...out);save();$('paste').value='';$('pasteOut').innerHTML='';
   return out.length;
 }
@@ -605,11 +619,19 @@ function applyInit(){
 let dEditId=null;
 const autoDivTax=(acct,gross)=>isIsa(acct)?0:Math.round(gross*db.settings.divTax/100);
 const dNet=d=>d.gross-d.tax;
-// 분배금 실수령액을 계좌 예수금에 더하거나(sign=1) 되돌린다(sign=-1). 0 아래로는 내려가지 않는다
-function cashDelta(d,sign){
-  const k=d.acct||'',v=Math.max(0,Math.round((db.cash[k]||0)+sign*dNet(d)));
-  if(v>0)db.cash[k]=v;else delete db.cash[k];
+// 계좌 예수금에 금액을 더한다(음수면 뺀다). 반영과 되돌림이 정확히 대칭이 되도록 0 보정은 하지 않는다
+function addCash(acct,amount){
+  const k=acct||'',v=Math.round((db.cash[k]||0)+amount);
+  if(v!==0)db.cash[k]=v;else delete db.cash[k];
 }
+// 분배금 실수령액을 예수금에 더하거나(sign=1) 되돌린다(sign=-1)
+function cashDelta(d,sign){addCash(d.acct,sign*dNet(d))}
+// 매수는 거래금액+수수료+세금만큼 빠지고, 매도는 거래금액-수수료-세금만큼 들어온다
+const tradeCash=t=>t.side==='buy'?-(t.qty*t.price+t.fee+t.tax):(t.qty*t.price-t.fee-t.tax);
+function cashDeltaTrade(t,sign){addCash(t.acct,sign*tradeCash(t))}
+// 예수금이 마이너스인 계좌 목록 (입금·초기 예수금 누락 신호)
+function negCash(){return Object.entries(db.cash).filter(([,v])=>v<0).map(([k,v])=>`${acctLabel(k)} ${fmt(v)}원`)}
+function negCashNote(){const n=negCash();return n.length?`<div class="msg warn">⚠ 예수금이 마이너스인 계좌: ${esc(n.join(', '))} — 초기 예수금이나 입금이 입력되지 않았을 수 있습니다. 증권사 예수금에 맞춰 고쳐 주세요.</div>`:''}
 const sumBy=(a,f)=>a.reduce((s,d)=>s+f(d),0);
 function readDiv(){
   const name=$('dName').value.trim(),gross=parseFloat($('dGross').value),acct=$('dAcct').value.trim();
@@ -771,17 +793,18 @@ function closeDay(date){
 function tradeRows(list,c,full){
   if(!list.length)return '<p class="note">거래가 없습니다.</p>';
   const head=full
-    ?'<th>거래일자</th><th class="l">계좌</th><th class="l">종목명</th><th>구분</th><th class="l">매매구분</th><th>수량</th><th>단가</th><th>거래금액</th><th>수수료</th><th>세금</th><th class="l">진입근거 / 기술적 타점</th><th>손절가</th><th>목표가</th><th>손익비</th><th>청산일·단가</th><th>실현손익(수익률)</th><th class="l">매매 복기</th><th></th>'
-    :'<th>거래일자</th><th class="l">계좌</th><th class="l">종목명</th><th>구분</th><th>수량</th><th>단가</th><th>거래금액</th><th>수수료</th><th>세금</th><th>실현손익(수익률)</th><th class="l">복기</th><th></th>';
+    ?'<th>거래일자</th><th class="l">계좌</th><th class="l">종목명</th><th>구분</th><th class="l">매매구분</th><th>수량</th><th>단가</th><th>거래금액</th><th>수수료</th><th>세금</th><th class="l">진입근거 / 기술적 타점</th><th>손절가</th><th>목표가</th><th>손익비</th><th>청산일·단가</th><th>실현손익(수익률)</th><th class="l">매매 복기</th><th>예수금</th><th></th>'
+    :'<th>거래일자</th><th class="l">계좌</th><th class="l">종목명</th><th>구분</th><th>수량</th><th>단가</th><th>거래금액</th><th>수수료</th><th>세금</th><th>실현손익(수익률)</th><th class="l">복기</th><th>예수금</th><th></th>';
   return `<table><tr>${head}</tr>${list.map(t=>{
     const r=c.rows[t.id];
     const real=`<td class="${cls(r?.realized||0)}">${r&&r.realized!==null?(r.unmatched?'⚠ 수량 부족':fmtS(r.realized)+` (${pct(r.rate)})`):'-'}</td>`;
+    const cashCell=t.type==='기초'?'<td class="note">–</td>':`<td>${t.cash?'<span class="dn">✓</span>':'<span class="note">–</span>'} <button class="sm" data-tc="${t.id}">${t.cash?'취소':'반영'}</button></td>`;
     const btn=`<td><button class="sm" data-e="${t.id}">수정</button> <button class="sm del" data-d="${t.id}">삭제</button></td>`;
     const side=`<td class="${t.side}">${t.side==='buy'?'매수':'매도'}</td>`;
     const base=`<td class="l">${t.date}</td><td class="l">${esc(acctLabel(t.acct))}</td><td class="l">${esc(t.name)}</td>${side}`;
-    if(!full)return `<tr>${base}<td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td>${real}<td class="l note wrap">${esc(t.memo)}</td>${btn}</tr>`;
+    if(!full)return `<tr>${base}<td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td>${real}<td class="l note wrap">${esc(t.memo)}</td>${cashCell}${btn}</tr>`;
     const ratio=t.side==='buy'?rr(t.price,t.stop,t.target):null;
-    return `<tr>${base}<td class="l">${esc(t.type||'')}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td><td class="l wrap">${esc(t.reason||'')}</td><td>${t.stop>0?fmt(t.stop):''}</td><td>${t.target>0?fmt(t.target):''}</td><td>${ratio===null?'':ratio.toFixed(1)}</td><td>${t.side==='sell'?t.date+' · '+fmt(t.price):''}</td>${real}<td class="l note wrap">${esc(t.memo)}</td>${btn}</tr>`}).join('')}</table>`;
+    return `<tr>${base}<td class="l">${esc(t.type||'')}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td><td class="l wrap">${esc(t.reason||'')}</td><td>${t.stop>0?fmt(t.stop):''}</td><td>${t.target>0?fmt(t.target):''}</td><td>${ratio===null?'':ratio.toFixed(1)}</td><td>${t.side==='sell'?t.date+' · '+fmt(t.price):''}</td>${real}<td class="l note wrap">${esc(t.memo)}</td>${cashCell}${btn}</tr>`}).join('')}</table>`;
 }
 function inp(id,val,align){return `<input class="hin${align==='t'?' t':''}" data-id="${esc(id)}" ${align==='t'?'type="text"':'type="number" step="any"'} value="${esc(val||'')}" style="width:${align==='t'?'220px':'105px'}">`}
 function acctTable(sums,tv,tc,tcash,edit){
@@ -829,6 +852,7 @@ function dashComments(d){
     L.push(`현금성 자산 비중 ${(d.tcash/d.total*100).toFixed(1)}%`);
   }
   if(d.inc.monthly>0)L.push(`예상 월 분배금 ${fmt(d.inc.monthly)}원 / 올해 받은 분배금(세전) ${fmt(d.divYear)}원`);
+  const ng=negCash();if(ng.length)L.push('⚠ 예수금 마이너스: '+ng.join(', ')+' — 입금·초기 예수금 확인');
   const rg=regime();if(rg.n)L.push(`매크로 레짐(1단계 점검): ${regimeText(rg)}`);
   if(d.missing>0)L.push(`현재가 미입력 ${d.missing}종목 — 평가손익은 입력된 종목 기준으로 보세요`);
   return L;
@@ -924,7 +948,7 @@ function render(){
   const totReal=Object.values(c.pos).reduce((s,p)=>s+p.realized,0);
   const heldN=heldList(c).length;
   $('holdKpi').innerHTML=[['총 자산(평가+예수금)',fmt(tv+tcash)+'원',''],['총 투자 원금(매입)',fmt(tc)+'원',''],['총 평가손익',fmtS(tv-tc)+'원',cls(tv-tc)],['포트폴리오 수익률',tc>0?pct((tv-tc)/tc*100):'-',cls(tv-tc)],['총 예수금',fmt(tcash)+'원',''],['누적 실현손익',fmtS(totReal)+'원',cls(totReal)],['보유 종목',heldN+'개','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
-  $('acctTable').innerHTML=acctTable(sums,tv,tc,tcash,true);
+  $('acctTable').innerHTML=negCashNote()+acctTable(sums,tv,tc,tcash,true);
   $('holdTables').innerHTML=sums.filter(s=>s.hs.length).map(s=>`<div class="card"><h2>${esc(acctLabel(s.acct))} 보유 종목</h2><div class="tw"><table><tr><th>종목명</th><th>섹터 / 업종</th><th>보유수량</th><th>매입단가</th><th>현재가(입력)</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>계좌 비중</th><th>1차 목표가</th><th>손절 기준가</th><th>상태</th><th>대응 전략 · 포지션 상태</th></tr>${s.hs.map(p=>{
     const px=db.prices[p.name]||0,m=db.meta[p.name]||{};
     const v=px>0?px*p.qty:null,pl=v===null?null:v-p.cost;
@@ -1051,6 +1075,7 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.de)editDiv(e.target.dataset.de);
   if(e.target.dataset.dd)delDiv(e.target.dataset.dd);
   if(e.target.dataset.dc)toggleDivCash(e.target.dataset.dc);
+  if(e.target.dataset.tc)toggleTradeCash(e.target.dataset.tc);
   if(e.target.dataset.mdel){const i=+e.target.dataset.mdel;if(confirm(`'${db.macro[i].item||'(빈 항목)'}' 점검 항목을 삭제할까요?`)){db.macro.splice(i,1);save();renderMacro();render()}}
 });
 // 보유현황 표의 입력칸: 현재가·목표가·손절가·섹터·전략·예수금
