@@ -725,10 +725,16 @@ function editDiv(id){
   $('dTitle').textContent='분배금 수정';$('btnDAdd').textContent='수정 저장';$('btnDCancel').classList.remove('hide');
   window.scrollTo({top:0,behavior:'smooth'});
 }
+// 분배금을 지우면 연결된 재투자 매수도 함께 지운다 (예수금은 둘 다 되돌린다)
 function delDiv(id){
-  const d=db.divs.find(x=>x.id===id);if(!d||!confirm(`삭제할까요?\n${d.date} ${d.name} ${fmt(d.gross)}원`))return;
+  const d=db.divs.find(x=>x.id===id);if(!d)return;
+  const t=d.reinvestId?db.trades.find(x=>x.id===d.reinvestId):null;
+  if(!confirm(`삭제할까요?\n${d.date} ${d.name} ${fmt(d.gross)}원`+(t?`\n\n연결된 재투자 매수도 함께 삭제됩니다:\n${t.date} ${t.name} 매수 ${fmt(t.qty)}주 @ ${fmt(t.price)}원`:'')))return;
   if(d.cash)cashDelta(d,-1);
-  db.divs=db.divs.filter(x=>x.id!==id);save();render();flash('삭제했습니다'+(d.cash?` (예수금에서 ${fmt(dNet(d))}원 되돌림)`:''));
+  if(t){if(t.cash)cashDeltaTrade(t,-1);db.trades=db.trades.filter(x=>x.id!==t.id)}
+  db.divs=db.divs.filter(x=>x.id!==id);save();render();
+  const v=db.cash[d.acct||'']||0,touched=d.cash||(t&&t.cash);
+  flash('삭제했습니다'+(t?` (분배금과 재투자 매수 ${t.name} ${fmt(t.qty)}주)`:'')+(touched?` · ${acctLabel(d.acct)} 예수금 ${fmt(v)}원으로 되돌림`:''),v<0?'warn':'ok');
 }
 // 이미 기록한 분배금의 예수금 반영 여부를 건별로 바꾼다
 function toggleDivCash(id){
@@ -785,7 +791,7 @@ function renderDiv(c){
   const byN={};db.divs.forEach(d=>{const n=byN[d.name]||(byN[d.name]={g:0,y:0,t:0,last:''});n.g+=d.gross;n.t+=d.tax;if(d.date.startsWith(yr))n.y+=d.gross;if(d.date>n.last)n.last=d.date});
   $('divName').innerHTML=Object.keys(byN).length?`<table><tr><th>종목</th><th>올해(세전)</th><th>누계(세전)</th><th>누계 실수령</th><th>최근 지급일</th></tr>${Object.entries(byN).sort((a,b)=>b[1].g-a[1].g).map(([k,v])=>`<tr><td class="l">${esc(k)}</td><td>${fmt(v.y)}</td><td>${fmt(v.g)}</td><td>${fmt(v.g-v.t)}</td><td>${v.last}</td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
   const list=[...db.divs].sort((a,b)=>b.date.localeCompare(a.date));
-  $('divList').innerHTML=list.length?`<table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th><th>예수금</th><th class="l">메모</th><th></th></tr>${list.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td><td>${d.cash?'<span class="dn">✓ 반영</span>':'<span class="note">–</span>'} <button class="sm" data-dc="${d.id}">${d.cash?'취소':'반영'}</button></td><td class="l note">${esc(d.memo)}${d.reinvestId?' ↻ 재투자 매수 연결':''}</td><td><button class="sm" data-de="${d.id}">수정</button> <button class="sm del" data-dd="${d.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
+  $('divList').innerHTML=list.length?`<table><tr><th>지급일</th><th class="l">계좌</th><th class="l">종목</th><th>세전</th><th>원천징수세</th><th>실수령</th><th>예수금</th><th class="l">메모</th><th></th></tr>${list.map(d=>`<tr><td class="l">${d.date}</td><td class="l">${esc(acctLabel(d.acct))}</td><td class="l">${esc(d.name)}</td><td>${fmt(d.gross)}</td><td>${fmt(d.tax)}</td><td>${fmt(dNet(d))}</td><td>${d.cash?'<span class="dn">✓ 반영</span>':'<span class="note">–</span>'} <button class="sm" data-dc="${d.id}">${d.cash?'취소':'반영'}</button></td><td class="l note">${esc(d.memo)}${d.reinvestId&&db.trades.some(t=>t.id===d.reinvestId)?' ↻ 재투자 매수 연결':''}</td><td><button class="sm" data-de="${d.id}">수정</button> <button class="sm del" data-dd="${d.id}">삭제</button></td></tr>`).join('')}</table>`:'<p class="note">기록된 분배금이 없습니다.</p>';
 }
 function downloadDivCsv(){
   const rows=[...db.divs].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>[d.date,acctLabel(d.acct),d.name,d.gross,d.tax,dNet(d),d.cash?'Y':'N',d.memo||'']);
