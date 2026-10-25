@@ -170,6 +170,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     </div>
     <div class="tw" id="rbOut"></div>
     <details id="layerDet" style="margin-top:10px"><summary class="note" style="cursor:pointer">종목별 층 바꾸기 (자동: 커버드콜·월배당 → 인컴, 그 외 → 코어, 예수금 → 완충)</summary><div class="tw" id="layerTable"></div></details>
+    <details id="stkDet" style="margin-top:10px"><summary class="note" style="cursor:pointer"><b>종목별 목표 비중 · 매수/매도 수량 제안</b> (종목마다 전체 자산 대비 목표 %를 적으면 계산)</summary><div class="tw" id="stkTable"></div></details>
   </div>
   <div class="card">
     <h2>월 현금흐름 목표 추적</h2>
@@ -710,6 +711,26 @@ function calData(c){
   const total=sumBy(months,x=>x.exp),ytd=sumBy(months.filter(x=>x.m<=cm),x=>x.real);
   const remain=sumBy(months.filter(x=>x.m>=cm),x=>Math.max(0,x.exp-x.real));
   return {yr,cm,items,months,total,ytd,remain,outlook:ytd+remain};
+}
+// 종목별 리밸런싱: 종목마다 전체 자산 대비 목표 비중(meta.tw)을 두고 조정 금액·수량을 제안
+function rbStocks(d,rb){
+  const by={};
+  d.held.forEach(p=>{const o=by[p.name]||(by[p.name]={name:p.name,val:0,accts:[],layer:layerOf(p)});o.val+=posVal(p);o.accts.push(p.acct)});
+  const band=db.settings.rbBand,X=rb.X,T=rb.total+X;
+  const rows=Object.values(by).sort((a,b)=>b.val-a.val).map(o=>{
+    const tw=(db.meta[o.name]||{}).tw>0?db.meta[o.name].tw:null,px=db.prices[o.name]>0?db.prices[o.name]:null;
+    const cw=rb.total>0?o.val/rb.total*100:0;
+    const r={...o,tw,px,cw};
+    if(tw!==null){
+      r.diff=cw-tw;r.tgt=rb.total*tw/100;r.delta=r.tgt-o.val;r.out=Math.abs(r.diff)>band+1e-9;
+      r.shares=px?Math.trunc(r.delta/px):null;r.need=Math.max(0,T*tw/100-o.val);
+      r.taxSell=r.delta<0&&o.accts.some(isTaxable);
+    }
+    return r;
+  });
+  const sn=rows.reduce((a,r)=>a+(r.need||0),0);
+  rows.forEach(r=>{if(r.tw!==null){r.add=X>0&&sn>0?r.need*X/sn:0;r.addShares=r.px?Math.floor(r.add/r.px):null}});
+  return {rows,sumTw:rows.reduce((a,r)=>a+(r.tw||0),0),nSet:rows.filter(r=>r.tw!==null).length,X};
 }
 // 월 현금흐름 목표 추적: 예상(보유×배당률, 세금·건보료 반영)과 올해 월별 실제 수령(세후)
 function cfData(c,fi){
@@ -1561,7 +1582,7 @@ function dashText(d){
   if(db.memo.trim())L.push('','[메모]',db.memo.trim());
   return L.join('\n');
 }
-let catOpen=false,layerOpen=false;
+let catOpen=false,layerOpen=false,stkOpen=false;
 function renderDash(c){
   const d=dashData(c);
   $('dashDate').textContent=`기준일 ${todayStr()} · 현재가 입력 ${d.held.length-d.missing}/${d.held.length}종목`+(db.pricesAt?` · 마지막 일괄 갱신 ${db.pricesAt}`:'');
@@ -1591,6 +1612,11 @@ function renderDash(c){
   $('layerTable').innerHTML=d.held.length?`<table><tr><th>계좌</th><th>종목</th><th>평가금액</th><th>층</th></tr>${d.held.map(p=>{const cur=(db.meta[p.name]||{}).layer;
     return `<tr><td class="l">${esc(acctLabel(p.acct))}</td><td class="l">${esc(p.name)}</td><td>${fmt(posVal(p))}</td><td class="l"><select class="hin" data-id="layer|${esc(p.name)}" style="width:auto"><option value="">자동 (${autoLayer(p)})</option>${LAYERS.map(k=>`<option value="${k}"${cur===k?' selected':''}>${k}</option>`).join('')}</select></td></tr>`}).join('')}</table>`:'';
   const det0=$('layerDet');if(det0)det0.open=layerOpen;
+  const sk=rbStocks(d,rb);
+  $('stkTable').innerHTML=sk.rows.length?`<table><tr><th class="l">종목</th><th class="l">층</th><th>현재 평가금액</th><th>현재 비중</th><th>목표 비중(%)</th><th>차이(%p)</th><th>조정 금액(+매수/−매도)</th><th>현재가</th><th>제안 수량</th>${sk.X>0&&sk.nSet?'<th>신규 '+fmt(sk.X)+'원 배분(수량)</th>':''}<th class="l">판정</th></tr>${sk.rows.map(r=>`<tr><td class="l">${esc(r.name)} <span class="note">(${r.accts.map(a=>esc(acctLabel(a))).join(', ')})</span></td><td class="l">${r.layer}</td><td>${fmt(r.val)}</td><td>${r.cw.toFixed(1)}%</td><td><input class="hin" data-id="tw|${esc(r.name)}" value="${r.tw??''}" style="width:70px"></td>${r.tw!==null?`<td class="${r.out?(r.diff>0?'up':'dn'):''}">${r.diff>0?'+':''}${r.diff.toFixed(1)}</td><td class="${cls(r.delta)}">${fmtS(r.delta)}</td><td>${r.px?fmt(r.px):'-'}</td><td><b>${r.shares===null?'-':r.shares===0?'0':(r.shares>0?'+':'')+fmt(r.shares)+'주'}</b></td>${sk.X>0&&sk.nSet?'<td><b>'+(r.addShares>0?fmt(r.addShares)+'주 ('+fmt(r.add)+'원)':'-')+'</b></td>':''}<td class="l">${r.out?(r.diff>0?'🔴 비중 초과':'🟠 비중 부족'):'🟢 허용 범위'}${r.taxSell?' <span class="note">⚠ 일반계좌 매도는 과세 확인</span>':''}</td>`:`<td>-</td><td>-</td><td>${r.px?fmt(r.px):'-'}</td><td>-</td>${sk.X>0&&sk.nSet?'<td>-</td>':''}<td class="l note">목표 미입력</td>`}</tr>`).join('')}</table>
+    <p class="note">· 목표 비중은 <b>전체 자산(평가금액+예수금) 대비 %</b>입니다. 지금 적은 종목 목표의 합계는 ${sk.sumTw.toFixed(1)}%이고, 나머지 ${(100-sk.sumTw).toFixed(1)}%는 예수금·목표 미입력 종목입니다${sk.sumTw>100?' <b class="up">(합계가 100%를 넘습니다)</b>':''}. 같은 종목을 여러 계좌에 가진 경우 합쳐서 계산하니, 실제 주문 계좌는 직접 고르세요.<br>
+    · <b>제안 수량</b>은 조정 금액 ÷ 현재가를 0 방향으로 내림한 값(현재가가 없으면 표시 안 함)이고, 수수료·호가 단위·세금은 반영하지 않았습니다. <b>신규 자금 배분</b>은 매도 없이 목표에 못 미친 종목에만 나눕니다(위 "이번에 새로 넣을 돈" 입력값 사용). 일반(과세) 계좌에서 매도하면 과세·금융소득 합산 영향이 있습니다.</p>`:'<p class="note">보유 종목이 없습니다.</p>';
+  const det1=$('stkDet');if(det1)det1.open=stkOpen;
   const cf=d.cf;
   $('cfKpi').innerHTML=[['예상 월 현금흐름(세후)',fmt(cf.monthly)+'원',''],['목표 월 현금흐름',cf.goal>0?fmt(cf.goal)+'원':'미설정',''],['목표 달성률',cf.goal>0?(cf.monthly/cf.goal*100).toFixed(0)+'%':'-',''],['부족분(월)',cf.goal>0?fmt(cf.gap)+'원':'-',cf.gap>0?'up':''],['올해 월평균 수령(세후)',fmt(cf.avg)+'원','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
   const cbar=v=>`<div style="background:var(--line);border-radius:4px;height:8px;width:120px"><div style="width:${Math.min(100,v)}%;background:var(--pri);height:8px;border-radius:4px"></div></div>`;
@@ -1797,7 +1823,7 @@ $('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){if($('pricePaste').va
 $('btnInit').onclick=applyInit;
 $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n){chkManual[n]=e.target.value;renderRuleCheck(autoChecks())}});
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
-document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open;if(e.target.id==='calDet')calOpen=e.target.open},true);
+document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open;if(e.target.id==='calDet')calOpen=e.target.open;if(e.target.id==='stkDet')stkOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
 ['rvPreset','rvFrom','rvTo'].forEach(id=>{$(id).onchange=()=>render()});
 $('rvNote').onchange=()=>{const v=$('rvNote').value.trim();if(v)db.reviews[rvKey]=v;else delete db.reviews[rvKey];save()};
