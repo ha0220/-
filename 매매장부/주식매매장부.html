@@ -253,6 +253,13 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <div class="bar" style="margin:10px 0 0"><button id="btnDParse">미리보기</button><button class="pri" id="btnDApply">반영</button></div>
     <div id="dPasteOut"></div>
   </div>
+  <div class="card">
+    <h2>📅 배당 캘린더 <span class="note" id="calYearLabel"></span></h2>
+    <div class="kpis" id="calKpi"></div>
+    <div class="tw" id="calOut" style="margin-top:10px"></div>
+    <div id="calMissing" style="margin-top:8px"></div>
+    <details id="calDet" style="margin-top:10px"><summary class="note" style="cursor:pointer">종목별 지급월 · 예상 금액 (지급월을 직접 고칠 수 있습니다)</summary><div class="tw" id="calGrid"></div></details>
+  </div>
   <div class="card"><h2>월별 수령액 <span class="note">예상 월 분배금은 지금 보유 종목 기준입니다</span></h2><div class="tw" id="divMonth"></div></div>
   <div class="card"><h2>종목별 누계</h2><div class="tw" id="divName"></div></div>
   <div class="card">
@@ -594,6 +601,42 @@ function rbData(d){
   const sn=rows.reduce((a,r)=>a+r.need,0);
   rows.forEach(r=>{r.add=X>0&&sn>0?r.need*X/sn:0});
   return {rows,total,X,ws,out:rows.filter(r=>r.out)};
+}
+// 배당 캘린더: 종목별 지급월(직접 입력 > 배당 주기로 추정)에 예상 분배금을 나누고 실제 기록과 비교
+function payMonthsOf(name){
+  const m=db.meta[name]||{};
+  const own=[...new Set(String(m.paym||'').split(/[^\d]+/).map(Number).filter(n=>n>=1&&n<=12))].sort((a,b)=>a-b);
+  if(own.length)return {months:own,src:'입력'};
+  const cy=m.cycle||'';
+  if(/분기/.test(cy))return {months:[3,6,9,12],src:'주기'};
+  if(/반기/.test(cy))return {months:[6,12],src:'주기'};
+  if(/연/.test(cy))return {months:[12],src:'주기'};
+  if(/월/.test(cy))return {months:[1,2,3,4,5,6,7,8,9,10,11,12],src:'주기'};
+  return {months:[1,2,3,4,5,6,7,8,9,10,11,12],src:'가정'};
+}
+function calData(c){
+  const yr=todayStr().slice(0,4),cm=+todayStr().slice(5,7),by={};
+  incomeRows(c).filter(r=>r.y>0).forEach(r=>{const o=by[r.p.name]||(by[r.p.name]={name:r.p.name,yearly:0,accts:[]});o.yearly+=r.yearly;o.accts.push(r.p.acct)});
+  const hasBase={},firstBuy={};
+  c.sorted.forEach(t=>{if(t.type==='기초')hasBase[t.name]=true;else if(t.side==='buy'&&!firstBuy[t.name])firstBuy[t.name]=t.date});
+  const act={};db.divs.filter(d=>d.date.startsWith(yr)).forEach(d=>{const m=+d.date.slice(5,7),o=act[d.name]||(act[d.name]={});o[m]=(o[m]||0)+d.gross});
+  const items=Object.values(by).sort((a,b)=>b.yearly-a.yearly).map(o=>{
+    const pm=payMonthsOf(o.name),per=o.yearly/pm.months.length;
+    const start=!hasBase[o.name]&&firstBuy[o.name]&&firstBuy[o.name].startsWith(yr)?+firstBuy[o.name].slice(5,7):0;
+    const missing=pm.months.filter(m=>m<cm&&m>start&&!(act[o.name]&&act[o.name][m]>0));
+    return {...o,pm,per,start,missing,act:act[o.name]||{}};
+  });
+  const months=[];
+  for(let m=1;m<=12;m++){
+    const exp=sumBy(items.filter(i=>i.pm.months.includes(m)),i=>i.per);
+    const real=sumBy(db.divs.filter(d=>d.date.startsWith(yr)&&+d.date.slice(5,7)===m),d=>d.gross);
+    const who=items.filter(i=>i.pm.months.includes(m)).map(i=>i.name);
+    const st=m>cm?'예정':m===cm?(real>=exp*0.8&&exp>0?'✅ 수령':exp>0?'⏳ 이번 달':'-'):exp<=0?(real>0?'✅ 수령':'-'):real>=exp*0.8?'✅ 수령':real>0?'🟠 예상보다 적음':'⚠ 기록 없음';
+    months.push({m,exp,real,who,st});
+  }
+  const total=sumBy(months,x=>x.exp),ytd=sumBy(months.filter(x=>x.m<=cm),x=>x.real);
+  const remain=sumBy(months.filter(x=>x.m>=cm),x=>Math.max(0,x.exp-x.real));
+  return {yr,cm,items,months,total,ytd,remain,outlook:ytd+remain};
 }
 // 월 현금흐름 목표 추적: 예상(보유×배당률, 세금·건보료 반영)과 올해 월별 실제 수령(세후)
 function cfData(c,fi){
@@ -964,7 +1007,20 @@ function applyDiv(){
   db.divs.push(...out);save();$('dPaste').value='';$('dPasteOut').innerHTML='';render();
   flash(`분배금 ${out.length}건을 반영했습니다 (세전 ${fmt(sumBy(out,d=>d.gross))}원)`+(addCash?` · 실수령 ${fmt(sumBy(out,dNet))}원을 예수금에 더함`:' · 예수금에는 반영하지 않음'));
 }
+let calOpen=false;
+function renderCal(c){
+  const k=calData(c);
+  $('calYearLabel').textContent=`${k.yr}년 · 배당률을 입력한 종목만 계산합니다`;
+  $('calKpi').innerHTML=[['올해 예상 분배금(세전)',fmt(k.total)+'원',''],['올해 받은 분배금(세전)',fmt(k.ytd)+'원',''],['앞으로 남은 예상',fmt(k.remain)+'원',''],['연말 전망(받은 것 + 남은 예상)',fmt(k.outlook)+'원','']].map(([a,b,c2])=>`<div class="kpi"><span>${a}</span><b class="${c2}">${b}</b></div>`).join('');
+  $('calOut').innerHTML=k.items.length?`<table><tr><th>월</th><th>예상(세전)</th><th>받은 금액(세전)</th><th>달성률</th><th class="l">상태</th><th class="l">지급 예정 종목</th></tr>${k.months.map(x=>`<tr${x.m===k.cm?' style="background:color-mix(in srgb,var(--pri) 8%,transparent)"':''}><td class="l">${x.m}월</td><td>${x.exp>0?fmt(x.exp):'-'}</td><td>${x.real>0?fmt(x.real):'-'}</td><td>${x.exp>0&&x.m<=k.cm?(x.real/x.exp*100).toFixed(0)+'%':'-'}</td><td class="l">${x.st}</td><td class="l wrap note">${esc(x.who.length>5?x.who.slice(0,5).join(', ')+` 외 ${x.who.length-5}개`:x.who.join(', '))}</td></tr>`).join('')}</table>
+  <p class="note">· 예상 = 보유 평가액 × 배당률 ÷ 지급 횟수(종목별 지급월에 균등 배분, 세전)입니다. 실제 분배금은 달마다 변동하므로 예상의 80% 이상이면 ✅로 봅니다.</p>`:'<p class="note">보유 종목에 배당률을 입력하면(보유 현황 → 예상 분배금) 월별 예상이 표시됩니다.</p>';
+  const miss=k.items.filter(i=>i.missing.length);
+  $('calMissing').innerHTML=miss.length?`<div class="msg warn" style="margin:0"><b>지급 예정이었는데 기록이 없는 분배금</b><br>${miss.map(i=>`· ${esc(i.name)} — ${i.missing.join('·')}월`).join('<br>')}<br><span class="note">이미 받았다면 위 "받은 분배금 기록"이나 붙여넣기로 입력하세요. 지급월이 실제와 다르면 아래 표에서 고치세요. 보유 시작 이전 달은 제외합니다.</span></div>`:(k.items.length?'<div class="note">지난 달까지 지급 예정이던 분배금은 모두 기록되어 있습니다.</div>':'');
+  $('calGrid').innerHTML=k.items.length?`<table><tr><th class="l">종목</th><th>연 예상</th><th>1회 예상</th><th class="l">지급월(예: 3,6,9,12)</th><th class="l">출처</th>${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>`<th>${m}월</th>`).join('')}</tr>${k.items.map(i=>`<tr><td class="l">${esc(i.name)}</td><td>${fmt(i.yearly)}</td><td>${fmt(i.per)}</td><td><input class="hin t" data-id="paym|${esc(i.name)}" value="${esc((db.meta[i.name]||{}).paym||'')}" placeholder="${i.pm.months.length===12?'매월':i.pm.months.join(',')}" style="width:110px"></td><td class="l note">${i.pm.src}${i.pm.src==='가정'?' (매월로 가정)':''}</td>${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const a=i.act[m]>0,p=i.pm.months.includes(m);return `<td class="${a?'dn':'note'}">${a?'✓ '+fmt(i.act[m]):p?fmt(i.per):''}</td>`}).join('')}</tr>`).join('')}</table>`:'';
+  const det=$('calDet');if(det)det.open=calOpen;
+}
 function renderDiv(c){
+  renderCal(c);
   const today=todayStr(),ym=today.slice(0,7),yr=today.slice(0,4),mon=Number(today.slice(5,7));
   const inc=incomeTotals(incomeRows(c).filter(r=>r.y>0));
   const ytd=db.divs.filter(d=>d.date.startsWith(yr)),cur=db.divs.filter(d=>d.date.startsWith(ym));
@@ -1667,7 +1723,7 @@ $('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){if($('pricePaste').va
 $('btnInit').onclick=applyInit;
 $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n){chkManual[n]=e.target.value;renderRuleCheck(autoChecks())}});
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
-document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open},true);
+document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open;if(e.target.id==='calDet')calOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
 ['rvPreset','rvFrom','rvTo'].forEach(id=>{$(id).onchange=()=>render()});
 $('rvNote').onchange=()=>{const v=$('rvNote').value.trim();if(v)db.reviews[rvKey]=v;else delete db.reviews[rvKey];save()};
@@ -1731,7 +1787,7 @@ document.body.addEventListener('change',e=>{
   else if(kind==='px'){if(n>0)db.prices[key]=n;else delete db.prices[key]}
   else{
     const m=db.meta[key]||(db.meta[key]={});
-    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'||kind==='guide'||kind==='layer'){if(v)m[kind]=v;else delete m[kind]}
+    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'||kind==='guide'||kind==='layer'||kind==='paym'){if(v)m[kind]=v;else delete m[kind]}
     else{if(n>0)m[kind]=n;else delete m[kind]}
   }
   save();
