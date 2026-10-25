@@ -311,6 +311,19 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
 </section>
 
 <section id="t-pnl" class="hide">
+  <div class="card">
+    <h2>📝 복기 리포트</h2>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label>기간</label><select id="rvPreset"><option value="month">이번 달</option><option value="lmonth">지난 달</option><option value="week">이번 주 (월~일)</option><option value="lweek">지난 주</option><option value="year">올해</option><option value="custom">직접 지정</option></select></div>
+      <div><label>시작일</label><input type="date" id="rvFrom"></div>
+      <div><label>종료일</label><input type="date" id="rvTo"></div>
+    </div>
+    <div class="kpis" id="rvKpi"></div>
+    <div id="rvOut" style="margin-top:10px"></div>
+    <label style="margin-top:10px">이 기간 배운 점 · 다음 행동 (기간별 자동 저장)</label>
+    <textarea id="rvNote" placeholder="예: 손절 기준가 없이 산 종목이 손실의 대부분 → 다음 달은 입력 전 매수 금지"></textarea>
+    <div class="bar" style="margin:10px 0 0"><button id="btnRvCopy">📋 복기 리포트 복사</button></div>
+  </div>
   <div class="card"><h2>월별 실현손익 (이동평균법, 비용 차감 후)</h2><div class="tw" id="pnlMonth"></div></div>
   <div class="card"><h2>종목별 실현손익</h2><div class="tw" id="pnlName"></div></div>
 </section>
@@ -413,7 +426,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -423,7 +436,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -449,7 +462,7 @@ function compute(){
     const p=pos[k]||(pos[k]={acct:t.acct||'',name:t.name,qty:0,cost:0,kind:t.kind,realized:0,fees:0});
     p.kind=t.kind;p.fees+=t.fee+t.tax;
     const amt=t.qty*t.price;
-    if(t.side==='buy'){p.qty+=t.qty;p.cost+=amt+t.fee+t.tax;rows[t.id]={realized:null}}
+    if(t.side==='buy'){const avgBefore=p.qty>0?p.cost/p.qty:0;p.qty+=t.qty;p.cost+=amt+t.fee+t.tax;rows[t.id]={realized:null,avgBefore}}
     else{
       let q=t.qty;
       if(q>p.qty+1e-9){errors.push(`${t.date} ${acctLabel(t.acct)} ${t.name}: 보유(${p.qty})보다 많이 매도(${t.qty}) — 입력 누락 확인`);q=p.qty}
@@ -1179,6 +1192,94 @@ function applyPrices(){
   return r.rows.length;
 }
 
+// ---------- 복기 리포트 ----------
+const addDays=(s,n)=>{const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const daysBetween=(a,b)=>Math.round((new Date(b+'T00:00:00Z')-new Date(a+'T00:00:00Z'))/864e5);
+function rvRange(preset){
+  const t=todayStr(),y=+t.slice(0,4),m=+t.slice(5,7),dow=(new Date(t+'T00:00:00Z').getUTCDay()+6)%7;
+  const mEnd=(yy,mm)=>new Date(Date.UTC(yy,mm,0)).toISOString().slice(0,10),pad=n=>String(n).padStart(2,'0');
+  if(preset==='week')return [addDays(t,-dow),addDays(t,6-dow)];
+  if(preset==='lweek')return [addDays(t,-dow-7),addDays(t,-dow-1)];
+  if(preset==='month')return [`${y}-${pad(m)}-01`,mEnd(y,m)];
+  if(preset==='lmonth'){const yy=m===1?y-1:y,mm=m===1?12:m-1;return [`${yy}-${pad(mm)}-01`,mEnd(yy,mm)]}
+  if(preset==='year')return [`${y}-01-01`,`${y}-12-31`];
+  return null;
+}
+function realizedIn(c,from,to){
+  return c.sorted.filter(t=>t.side==='sell'&&t.type!=='기초'&&t.date>=from&&t.date<=to).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
+}
+function reviewData(c,from,to){
+  const st=db.settings;
+  const tr=c.sorted.filter(t=>t.type!=='기초'&&t.date>=from&&t.date<=to);
+  const buys=tr.filter(t=>t.side==='buy'),sells=tr.filter(t=>t.side==='sell');
+  const calc=sells.filter(t=>{const r=c.rows[t.id];return r&&r.realized!==null&&!r.unmatched});
+  const wins=calc.filter(t=>c.rows[t.id].realized>0),losses=calc.filter(t=>c.rows[t.id].realized<0);
+  const rl=t=>c.rows[t.id].realized,sum=a=>a.reduce((s,t)=>s+rl(t),0);
+  const avgWin=wins.length?sum(wins)/wins.length:0,avgLoss=losses.length?sum(losses)/losses.length:0;
+  const realized=sells.reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0);
+  const chk=buys.filter(t=>t.type!=='분배금 재투자');
+  const noStop=chk.filter(t=>!(t.stop>0));
+  const lowRR=chk.filter(t=>{if(!(t.stop>0))return false;const r=rr(t.price,t.stop,t.target);return r!==null&&r<st.rrMin});
+  const avgDown=chk.filter(t=>{const r=c.rows[t.id];return r&&r.avgBefore>0&&t.price<r.avgBefore});
+  const noMemo=sells.filter(t=>!(t.memo||'').trim());
+  const byName={};sells.forEach(t=>{byName[t.name]=(byName[t.name]||0)+(c.rows[t.id]?.realized||0)});
+  const names=Object.entries(byName).sort((a,b)=>b[1]-a[1]);
+  const len=daysBetween(from,to)+1,pFrom=addDays(from,-len),pTo=addDays(from,-1);
+  const dv=db.divs.filter(d=>d.date>=from&&d.date<=to);
+  const best=calc.length?calc.reduce((a,t)=>rl(t)>rl(a)?t:a):null,worst=calc.length?calc.reduce((a,t)=>rl(t)<rl(a)?t:a):null;
+  const acts=[];
+  if(noStop.length)acts.push(`손절 기준가 없이 매수한 ${noStop.length}건(${[...new Set(noStop.map(t=>t.name))].join(', ')}) — 다음 매수 전에 손절가를 먼저 입력하세요 (Rule 1)`);
+  if(lowRR.length)acts.push(`손익비가 1:${st.rrMin} 미만인 매수 ${lowRR.length}건 — 진입 전에 목표가·손절가를 다시 점검하세요 (Rule 3)`);
+  if(avgDown.length)acts.push(`평단보다 낮은 가격의 추가 매수(물타기) ${avgDown.length}건(${[...new Set(avgDown.map(t=>t.name))].join(', ')}) — 철칙 점검 (Rule 6)`);
+  if(noMemo.length)acts.push(`복기 메모가 없는 매도 ${noMemo.length}건 — 진입 근거와 청산 이유를 적어 두세요`);
+  const exp=calc.length?sum(calc)/calc.length:0;
+  if(calc.length>=5&&exp<0)acts.push(`건당 기대손익이 마이너스(${fmtS(exp)}원) — 손실 건의 공통점(종목·시점·진입 근거)을 점검하세요`);
+  return {bestV:best?rl(best):0,worstV:worst?rl(worst):0,from,to,buys,sells,tr,calc,wins,losses,avgWin,avgLoss,realized,noStop,lowRR,avgDown,noMemo,names,best,worst,
+    winRate:calc.length?wins.length/calc.length*100:null,plRatio:avgLoss<0?avgWin/-avgLoss:null,exp,
+    fees:sumBy(tr,t=>t.fee+t.tax),volume:sumBy(tr,t=>t.qty*t.price),pFrom,pTo,prev:realizedIn(c,pFrom,pTo),
+    divGross:sumBy(dv,d=>d.gross),divNet:sumBy(dv,d=>d.gross-d.tax),acts,
+    unmatched:sells.length-calc.length};
+}
+function reviewText(r){
+  const L=[`[복기 리포트 ${r.from} ~ ${r.to}]`,
+    `매수 ${r.buys.length}건 / 매도 ${r.sells.length}건 · 거래대금 ${fmt(r.volume)}원 · 수수료·세금 ${fmt(r.fees)}원`,
+    `실현손익(비용 차감 후) ${fmtS(r.realized)}원 · 직전 같은 길이 기간(${r.pFrom} ~ ${r.pTo}) ${fmtS(r.prev)}원 → 차이 ${fmtS(r.realized-r.prev)}원`];
+  if(r.calc.length){
+    L.push(`매도 ${r.calc.length}건: 승 ${r.wins.length} / 패 ${r.losses.length}${r.winRate!==null?` (승률 ${r.winRate.toFixed(0)}%)`:''} · 평균 이익 ${fmtS(r.avgWin)}원 · 평균 손실 ${fmtS(r.avgLoss)}원`+(r.plRatio!==null?` · 손익비 ${r.plRatio.toFixed(2)}`:'')+` · 건당 기대손익 ${fmtS(r.exp)}원`);
+    if(r.best)L.push(`최고 ${r.best.name} ${fmtS(r.bestV)}원 / 최악 ${r.worst.name} ${fmtS(r.worstV)}원`);
+  }
+  if(r.unmatched)L.push(`⚠ 보유 수량 부족으로 손익 계산에서 제외한 매도 ${r.unmatched}건`);
+  L.push('','[원칙 점검]',`· 손절가 미입력 매수 ${r.noStop.length}건 / 손익비 미달 ${r.lowRR.length}건 / 물타기 ${r.avgDown.length}건`,`· 복기 메모 작성 ${r.sells.length-r.noMemo.length}/${r.sells.length}건`);
+  if(r.names.length)L.push('','[종목별 실현손익]',...r.names.map(([n,v])=>`· ${n} ${fmtS(v)}원`));
+  if(r.divGross>0)L.push('',`[분배금] 세전 ${fmt(r.divGross)}원 / 실수령 ${fmt(r.divNet)}원`);
+  L.push('','[다음에 할 일]',...(r.acts.length?r.acts.map(x=>'· '+x):['· 점검한 항목에 원칙 위반이 없습니다. 현재 방식을 유지하세요']));
+  const note=(db.reviews[r.from+'~'+r.to]||'').trim();if(note)L.push('','[내 복기 메모]',note);
+  return L.join('\n');
+}
+let rvKey='';
+function rvPeriod(){
+  const pr=$('rvPreset').value,rg=rvRange(pr);
+  if(rg){$('rvFrom').value=rg[0];$('rvTo').value=rg[1]}
+  $('rvFrom').disabled=$('rvTo').disabled=pr!=='custom';
+  let f=$('rvFrom').value,t=$('rvTo').value;
+  if(!f||!t||f>t){const d=todayStr();f=t=d}
+  return [f,t];
+}
+function renderReview(c){
+  const [from,to]=rvPeriod(),r=reviewData(c,from,to),k=from+'~'+to;
+  if(k!==rvKey){rvKey=k;$('rvNote').value=db.reviews[k]||''}
+  $('rvKpi').innerHTML=[['실현손익(비용 차감 후)',fmtS(r.realized)+'원',cls(r.realized)],['승률',r.winRate===null?'-':r.winRate.toFixed(0)+'%'+` (${r.wins.length}승 ${r.losses.length}패)`,''],['손익비(평균 이익÷평균 손실)',r.plRatio===null?'-':r.plRatio.toFixed(2),''],['건당 기대손익',r.calc.length?fmtS(r.exp)+'원':'-',cls(r.exp)],['복기 메모 작성',r.sells.length?`${r.sells.length-r.noMemo.length}/${r.sells.length}건`:'-',''],['직전 같은 길이 기간 대비',fmtS(r.realized-r.prev)+'원',cls(r.realized-r.prev)]].map(([a,b,k2])=>`<div class="kpi"><span>${a}</span><b class="${k2}">${b}</b></div>`).join('');
+  const nm=a=>a.length?[...new Set(a.map(t=>t.name))].join(', '):'-';
+  $('rvOut').innerHTML=`<p class="note" style="margin:0 0 8px">${r.from} ~ ${r.to} · 매수 ${r.buys.length}건 / 매도 ${r.sells.length}건 · 거래대금 ${fmt(r.volume)}원 · 수수료·세금 ${fmt(r.fees)}원`+(r.divGross>0?` · 분배금 세전 ${fmt(r.divGross)}원`:'')+(r.unmatched?` · ⚠ 보유 수량 부족으로 손익에서 제외한 매도 ${r.unmatched}건`:'')+`</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px"><div class="tw"><table><tr><th class="l">원칙 점검 (매수 기준)</th><th>건수</th><th class="l">해당 종목</th></tr>
+  <tr><td class="l">손절 기준가 미입력 (Rule 1)</td><td class="${r.noStop.length?'up':''}">${r.noStop.length}</td><td class="l wrap">${esc(nm(r.noStop))}</td></tr>
+  <tr><td class="l">손익비 1:${db.settings.rrMin} 미달 (Rule 3)</td><td class="${r.lowRR.length?'up':''}">${r.lowRR.length}</td><td class="l wrap">${esc(nm(r.lowRR))}</td></tr>
+  <tr><td class="l">물타기 (Rule 6)</td><td class="${r.avgDown.length?'up':''}">${r.avgDown.length}</td><td class="l wrap">${esc(nm(r.avgDown))}</td></tr>
+  <tr><td class="l">복기 메모 없는 매도</td><td class="${r.noMemo.length?'up':''}">${r.noMemo.length}</td><td class="l wrap">${esc(nm(r.noMemo))}</td></tr></table></div>
+  <div class="tw">${r.names.length?`<table><tr><th class="l">종목별 실현손익</th><th>손익</th></tr>${r.names.map(([n,v])=>`<tr><td class="l">${esc(n)}</td><td class="${cls(v)}">${fmtS(v)}</td></tr>`).join('')}</table>`:'<p class="note">이 기간 매도 내역이 없습니다.</p>'}</div></div>
+  <h3>다음에 할 일 (자동)</h3><ul style="margin:0;padding-left:20px;font-size:14px">${(r.acts.length?r.acts:['점검한 항목에 원칙 위반이 없습니다. 현재 방식을 유지하세요']).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+  <p class="note">표본(매도 건수)이 적으면 승률·손익비·기대손익은 참고만 하세요. 이동평균법 손익이라 건별 보유 기간은 계산하지 않습니다.</p>`;
+}
 // ---------- 마감 ----------
 function closeDay(date){
   date=date||$('fDate').value||todayStr();
@@ -1458,6 +1559,7 @@ function render(){
   $('priceStamp').textContent=db.pricesAt?`현재가 마지막 일괄 갱신: ${db.pricesAt} (붙여넣기 기준, 개별 입력은 포함하지 않음)`:'현재가는 직접 입력하거나, 오늘 입력 탭의 "현재가 붙여넣기"로 한 번에 갱신할 수 있습니다.';
   renderFlow();
   renderAlerts(c);
+  renderReview(c);
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -1567,6 +1669,9 @@ $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n)
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
 document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
+['rvPreset','rvFrom','rvTo'].forEach(id=>{$(id).onchange=()=>render()});
+$('rvNote').onchange=()=>{const v=$('rvNote').value.trim();if(v)db.reviews[rvKey]=v;else delete db.reviews[rvKey];save()};
+$('btnRvCopy').onclick=async()=>{const [f,t]=rvPeriod();try{await navigator.clipboard.writeText(reviewText(reviewData(compute(),f,t)));flash('복기 리포트를 복사했습니다')}catch(e){flash('복사 실패: 브라우저가 클립보드를 막았습니다','warn')}};
 $('btnDashCopy').onclick=async()=>{try{await navigator.clipboard.writeText(dashText(dashData(compute())));flash('대시보드 요약을 복사했습니다')}catch(e){flash('복사 실패: 브라우저가 클립보드를 막았습니다','warn')}};
 $('btnXAdd').onclick=addFlow;
 $('btnXCancel').onclick=clearFlowForm;
