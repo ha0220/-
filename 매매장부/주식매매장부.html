@@ -70,6 +70,7 @@ h3{font-size:14px;margin:14px 0 6px}
 </div>
 <div id="msg"></div>
 <div id="alertBar"></div>
+<div id="watchBar"></div>
 <div id="backupBar"></div>
 <div class="tabs" id="tabs">
   <button data-t="today" class="on">오늘 입력</button>
@@ -208,6 +209,20 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <h2>예상 분배금 (인컴 자산) <span class="note">ETF와 ISA 계좌 종목이 나옵니다. 배당 주기·연간 예상 배당률(%)을 입력하면 평가금액 기준으로 계산합니다.</span></h2>
     <div class="tw" id="incomeTable"></div>
     <div id="incomeNote" class="note" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <h2>👀 관심종목 · 진입가 알림 <span class="note">아직 보유하지 않은 종목의 희망 매수가·손절가·목표가를 적어 두면 현재가가 가까워질 때 알려 줍니다</span></h2>
+    <div class="grid" id="wForm" style="margin-bottom:8px">
+      <div><label>종목명</label><input id="wName" list="nameList"></div>
+      <div><label>종류</label><select id="wKind"><option value="stock">주식</option><option value="etf">ETF</option></select></div>
+      <div><label>희망 매수가</label><input type="number" id="wBuy" step="any"></div>
+      <div><label>손절 기준가</label><input type="number" id="wStop" step="any"></div>
+      <div><label>1차 목표가</label><input type="number" id="wTarget" step="any"></div>
+      <div style="grid-column:span 2"><label>진입 근거</label><input id="wReason" placeholder="예: 20일선 눌림목, 주도 섹터"></div>
+    </div>
+    <div class="bar" style="margin:0 0 10px"><button class="pri" id="btnWAdd">관심종목 추가</button></div>
+    <div class="tw" id="watchTable"></div>
+    <div class="note" id="watchNote" style="margin-top:6px"></div>
   </div>
   <div class="card">
     <h2>기초 보유 등록 <span class="note">처음 한 번, 지금 보유 중인 종목을 장부에 올립니다</span></h2>
@@ -466,7 +481,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
@@ -477,7 +492,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},watch:Array.isArray(r.watch)?r.watch:[],watchAck:r.watchAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -562,10 +577,12 @@ function pruneAcks(c){
   if(ch)save();
 }
 function alertSnap(c){const o={};alertItems(c).filter(x=>x.pending).forEach(x=>{o[x.name]=x.key});return o}
+let alertCnt=0,watchCnt=0;
+function setTitle(){const n=alertCnt+watchCnt;document.title=(n?`(${n}) `:'')+'주식 매매 관리 장부'}
 function renderAlerts(c){
   pruneAcks(c);
   const list=alertItems(c).filter(x=>x.pending);
-  document.title=(list.length?`(${list.length}) `:'')+'주식 매매 관리 장부';
+  alertCnt=list.length;setTitle();
   if(!list.length){$('alertBar').innerHTML='';return}
   $('alertBar').innerHTML=`<div class="alerts"><h2><span>🔔 가격 알림 ${list.length}건</span><button class="sm" data-ackall="1">모두 확인</button></h2>${list.map(x=>{
     const k=ALERT_KINDS[x.key],a=x.a,near=x.key.startsWith('near');
@@ -738,6 +755,67 @@ function rbStocks(d,rb){
   const sn=rows.reduce((a,r)=>a+(r.need||0),0);
   rows.forEach(r=>{if(r.tw!==null){r.add=X>0&&sn>0?r.need*X/sn:0;r.addShares=r.px?Math.floor(r.add/r.px):null}});
   return {rows,sumTw:rows.reduce((a,r)=>a+(r.tw||0),0),nSet:rows.filter(r=>r.tw!==null).length,X};
+}
+// ---------- 관심종목 · 진입가 알림 ----------
+const WRANK={near:1,hit:2,below:2};
+const WLABEL={hit:['🟢','희망 매수가 도달'],near:['🟡','희망 매수가 근접'],below:['🔴','손절가 아래']};
+function watchAlert(w){
+  const px=db.prices[w.name],nw=db.settings.nearPct||0;
+  if(!(px>0))return null;
+  if(w.stop>0&&px<=w.stop)return {key:'below',px,ref:w.stop};
+  if(w.buy>0&&px<=w.buy)return {key:'hit',px,ref:w.buy};
+  if(w.buy>0&&nw>0&&(px-w.buy)/px*100<=nw)return {key:'near',px,ref:w.buy,gap:(w.buy-px)/px*100};
+  return null;
+}
+function watchPending(key,ack){
+  if(!ack)return true;
+  if(ack===key)return false;
+  return !(WRANK[key]<WRANK[ack]);
+}
+// 이미 보유 중인 종목은 알림에서 제외. 손실 한도(총자산 대비 %) 기준 최대 수량도 함께 계산
+function watchItems(c){
+  const held=new Set(heldList(c).map(p=>p.name));let total=0;acctSummary(c).forEach(a=>{total+=a.val+a.cash});
+  const order={hit:0,below:1,near:2},risk=total*db.settings.riskPct/100;
+  return db.watch.map(w=>{
+    const isHeld=held.has(w.name),a=isHeld?null:watchAlert(w),r=rr(w.buy,w.stop,w.target);
+    const qty=w.buy>0&&w.stop>0&&w.buy>w.stop&&risk>0?Math.floor(risk/(w.buy-w.stop)):null;
+    return {w,isHeld,a,rr:r,qty,invest:qty!==null?qty*w.buy:null,wt:qty!==null&&total>0?qty*w.buy/total*100:null,
+      pending:!!a&&watchPending(a.key,db.watchAck[w.id])};
+  }).sort((x,y)=>(x.a?order[x.a.key]:9)-(y.a?order[y.a.key]:9));
+}
+function watchSnap(c){const o={};watchItems(c).filter(x=>x.pending).forEach(x=>{o[x.w.id]=x.a.key});return o}
+function renderWatch(c){
+  const items=watchItems(c);
+  // 알림이 풀렸거나 보유로 바뀐 종목의 확인 기록은 지운다
+  let ch=false;Object.keys(db.watchAck).forEach(id=>{const it=items.find(x=>x.w.id===id);if(!it||!it.a){delete db.watchAck[id];ch=true}});if(ch)save();
+  const list=items.filter(x=>x.pending);
+  watchCnt=list.length;setTitle();
+  $('watchBar').innerHTML=list.length?`<div class="alerts"><h2><span>👀 관심종목 알림 ${list.length}건</span></h2>${list.map(x=>{
+    const [ic,lb]=WLABEL[x.a.key],w=x.w;
+    const msg=x.a.key==='near'?`현재가 ${fmt(x.a.px)} · 희망가 ${fmt(x.a.ref)}까지 ${pct(x.a.gap)}`:x.a.key==='hit'?`현재가 ${fmt(x.a.px)} ≤ 희망가 ${fmt(x.a.ref)}`:`현재가 ${fmt(x.a.px)} ≤ 손절가 ${fmt(x.a.ref)} — 진입 근거를 다시 점검하세요`;
+    return `<div class="al"><span class="n">${ic} <b>${esc(w.name)}</b> ${lb} — ${msg}${x.qty?` · 손실 한도 기준 최대 ${fmt(x.qty)}주`:''}${w.reason?` <span class="note">근거: ${esc(w.reason)}</span>`:''}</span><span><button class="sm" data-wbuy="${w.id}">매수 입력</button> <button class="sm" data-wack="${w.id}">확인</button></span></div>`}).join('')}</div>`:'';
+  const inp2=(w,k,v,wd)=>`<input class="wi" data-wid="${w.id}" data-k="${k}" value="${v>0?v:(typeof v==='string'?esc(v):'')}" style="width:${wd}px">`;
+  $('watchTable').innerHTML=items.length?`<table><tr><th class="l">종목</th><th>희망 매수가</th><th>손절가</th><th>목표가</th><th>현재가(입력)</th><th>희망가 대비</th><th>손익비</th><th>최대 수량(손실 한도)</th><th>예상 투입금(비중)</th><th class="l">상태</th><th class="l">진입 근거</th><th></th></tr>${items.map(x=>{
+    const w=x.w,px=db.prices[w.name]>0?db.prices[w.name]:0,rrBad=x.rr!==null&&x.rr<db.settings.rrMin;
+    const st=x.isHeld?'✅ 보유 중':x.a?WLABEL[x.a.key][0]+' '+WLABEL[x.a.key][1]:(px>0?'대기':'현재가 입력 필요');
+    return `<tr><td class="l">${esc(w.name)} <span class="note">${w.kind==='etf'?'ETF':'주식'}</span></td><td>${inp2(w,'buy',w.buy,90)}</td><td>${inp2(w,'stop',w.stop,90)}</td><td>${inp2(w,'target',w.target,90)}</td><td><input class="hin" data-id="px|${esc(w.name)}" value="${px||''}" style="width:90px"></td><td>${px>0&&w.buy>0?pct((px-w.buy)/w.buy*100):'-'}</td><td class="${rrBad?'up':''}">${x.rr===null?'-':'1:'+x.rr.toFixed(1)}${rrBad?' ⚠':''}</td><td>${x.qty===null?'-':fmt(x.qty)+'주'}</td><td>${x.invest===null?'-':fmt(x.invest)+(x.wt!==null?` (${x.wt.toFixed(1)}%)`:'')}</td><td class="l">${st}</td><td class="l"><input class="wi t" data-wid="${w.id}" data-k="reason" value="${esc(w.reason||'')}" style="width:180px"></td><td><button class="sm" data-wbuy="${w.id}">매수 입력</button> <button class="sm del" data-wdel="${w.id}">삭제</button></td></tr>`}).join('')}</table>`:'<p class="note">관심종목이 없습니다. 위에서 종목명과 희망 매수가를 입력해 추가하세요.</p>';
+  $('watchNote').textContent=items.length?`최대 수량 = 총자산 × 1회 거래 손실 한도(${db.settings.riskPct}%) ÷ (희망 매수가 − 손절가) 입니다(손절가가 있을 때만). 손익비가 ${db.settings.rrMin} 미만이면 ⚠. 현재가는 "현재가 붙여넣기"로도 갱신되고, 근접 기준은 설정의 근접 알림 기준(${db.settings.nearPct}%)을 씁니다. 수수료·호가 단위는 반영하지 않았습니다.`:'';
+}
+function addWatch(){
+  const name=$('wName').value.trim(),buy=parseFloat($('wBuy').value)||0,stop=parseFloat($('wStop').value)||0,target=parseFloat($('wTarget').value)||0;
+  if(!name)return err('관심종목 이름을 입력하세요');
+  if(!(buy>0||stop>0))return err('희망 매수가나 손절가 중 하나는 입력하세요');
+  const o={name,kind:$('wKind').value,buy,stop,target,reason:$('wReason').value.trim()},i=db.watch.findIndex(x=>x.name===name);
+  if(i>=0)db.watch[i]={...db.watch[i],...o};else db.watch.push({id:uid(),addedAt:todayStr(),...o});
+  ['wName','wBuy','wStop','wTarget','wReason'].forEach(k=>$(k).value='');
+  save();render();flash(`관심종목 ${i>=0?'수정':'추가'}: ${name}`);
+}
+function watchToTrade(id){
+  const it=watchItems(compute()).find(x=>x.w.id===id);if(!it)return;const w=it.w;
+  tab('today');
+  $('fSide').value='buy';$('fKind').value=w.kind;$('fName').value=w.name;$('fPrice').value=w.buy>0?w.buy:(db.prices[w.name]||'');
+  $('fStop').value=w.stop||'';$('fTarget').value=w.target||'';$('fQty').value=it.qty||'';$('fReason').value=w.reason||'';
+  checkForm();flash(`관심종목 → 매수 입력: ${w.name} (희망 매수가 기준, 수량은 손실 한도 기준 최대값이니 확인 후 추가하세요)`);window.scrollTo({top:0,behavior:'smooth'});
 }
 // ---------- 백업 알림 · 데이터 점검 ----------
 function backupInfo(){
@@ -1338,7 +1416,7 @@ function priceFromRest(rest){
   return null;
 }
 function parsePrices(text){
-  const names=[...new Set(heldList(compute()).map(p=>p.name))];
+  const held=[...new Set(heldList(compute()).map(p=>p.name))],names=[...new Set([...held,...db.watch.map(w=>w.name)])];
   const found={},order=[],unmatched=[];let cols=null,dups=0;
   const take=(name,price)=>{if(name in found){dups++}else order.push(name);found[name]=price};
   for(const raw of text.split(/\r?\n/)){
@@ -1361,7 +1439,7 @@ function parsePrices(text){
   }
   const old=n=>db.prices[n]||0;
   const rows=order.map(n=>({name:n,price:found[n],old:old(n),chg:old(n)>0?(found[n]-old(n))/old(n)*100:null}));
-  return {rows,unmatched,dups,missing:names.filter(n=>!(n in found))};
+  return {rows,unmatched,dups,missing:held.filter(n=>!(n in found))};
 }
 function previewPrices(){
   const r=parsePrices($('pricePaste').value);let h='';
@@ -1375,12 +1453,12 @@ function previewPrices(){
 function applyPrices(){
   const r=previewPrices();
   if(!r.rows.length){flash('반영할 현재가가 없습니다','warn');return false}
-  const before=alertSnap(compute());
+  const before=alertSnap(compute()),wbefore=watchSnap(compute());
   r.rows.forEach(x=>{db.prices[x.name]=x.price});
   const d=new Date();db.pricesAt=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16).replace('T',' ');
   save();$('pricePaste').value='';$('pricePasteOut').innerHTML='';render();
   const big=r.rows.filter(x=>x.chg!==null&&Math.abs(x.chg)>=30).length;
-  const fresh=Object.entries(alertSnap(compute())).filter(([n,k])=>before[n]!==k);
+  const fresh=Object.entries(alertSnap(compute())).filter(([n,k])=>before[n]!==k).concat(Object.entries(watchSnap(compute())).filter(([n,k])=>wbefore[n]!==k));
   flash(`현재가 ${r.rows.length}종목 갱신`+(r.missing.length?` · 미갱신 ${r.missing.length}종목`:'')+(big?` · ⚠ 변동 30% 이상 ${big}종목 확인`:'')+(fresh.length?` · 🔔 새 가격 알림 ${fresh.length}건`:''),big||r.missing.length||fresh.length?'warn':'ok');
   return r.rows.length;
 }
@@ -1605,6 +1683,7 @@ function dashComments(d){
     L.push(`현금성 자산 비중 ${(d.tcash/d.total*100).toFixed(1)}%`);
   }
   if(d.inc.monthly>0)L.push(`예상 월 분배금 ${fmt(d.inc.monthly)}원 / 올해 받은 분배금(세전) ${fmt(d.divYear)}원`);
+  {const wa=watchItems(d.c).filter(x=>x.a);if(wa.length)L.push('관심종목 가격 알림: '+wa.map(x=>`${x.w.name}(${WLABEL[x.a.key][1]})`).join(', '))}
   {const w=dataChecks(d.c).filter(x=>x.lv==='warn').length;if(w)L.push(`데이터 점검: ⚠ ${w}건 확인 필요 (설정 탭 > 데이터 점검)`)}
   if(d.rb.out.length)L.push('리밸런싱 점검: '+d.rb.out.map(r=>`${r.k} ${r.cw.toFixed(1)}%(목표 ${r.tw.toFixed(0)}%, ${r.diff>0?'+':''}${r.diff.toFixed(1)}%p)`).join(', ')+` — 허용 편차 ±${db.settings.rbBand}%p 초과`);
   if(d.cf.goal>0&&(d.cf.annual>0||d.cf.ytd>0))L.push(`월 현금흐름(세후 추정) ${fmt(d.cf.monthly)}원 / 목표 ${fmt(d.cf.goal)}원 (${(d.cf.monthly/d.cf.goal*100).toFixed(0)}%)`+(d.cf.need>0?` · 목표까지 약 ${fmt(d.cf.need)}원 추가 필요(현재 세후 배당률 ${d.cf.netYield.toFixed(2)}% 기준)`:''));
@@ -1758,6 +1837,7 @@ function render(){
   $('priceStamp').textContent=db.pricesAt?`현재가 마지막 일괄 갱신: ${db.pricesAt} (붙여넣기 기준, 개별 입력은 포함하지 않음)`:'현재가는 직접 입력하거나, 오늘 입력 탭의 "현재가 붙여넣기"로 한 번에 갱신할 수 있습니다.';
   renderFlow();
   renderAlerts(c);
+  renderWatch(c);
   renderBackup();
   renderChecks(c);
   renderReview(c);
@@ -1893,6 +1973,7 @@ $('btnDParse').onclick=previewDiv;
 $('btnDApply').onclick=applyDiv;
 $('btnDCsv').onclick=downloadDivCsv;
 $('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);flash('복사했습니다')}catch(e){flash('복사 실패: 직접 선택해서 복사하세요','warn')}};
+$('btnWAdd').onclick=addWatch;
 $('btnBackup').onclick=()=>downloadBackup();
 $('btnCsv').onclick=downloadCsv;
 $('btnCsvHold').onclick=downloadHoldCsv;
@@ -1913,6 +1994,9 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.ack){const it=alertItems(compute()).find(x=>x.name===e.target.dataset.ack);if(it){db.alertAck[it.name]=it.key;save();render()}}
   if(e.target.dataset.bk==='now'){downloadBackup();render()}
   if(e.target.dataset.bk==='snooze'){db.backupSnooze=todayStr();save();render()}
+  if(e.target.dataset.wack){const it=watchItems(compute()).find(x=>x.w.id===e.target.dataset.wack);if(it&&it.a){db.watchAck[it.w.id]=it.a.key;save();render()}}
+  if(e.target.dataset.wbuy)watchToTrade(e.target.dataset.wbuy);
+  if(e.target.dataset.wdel){const w=db.watch.find(x=>x.id===e.target.dataset.wdel);if(w&&confirm(`관심종목 '${w.name}'을(를) 삭제할까요?`)){db.watch=db.watch.filter(x=>x.id!==w.id);delete db.watchAck[w.id];save();render()}}
   if(e.target.dataset.ackall){alertItems(compute()).forEach(x=>{db.alertAck[x.name]=x.key});save();render()}
   if(e.target.dataset.bell){const n=e.target.dataset.bell,m=db.meta[n]||(db.meta[n]={});if(m.alertOff)delete m.alertOff;else m.alertOff=true;save();render();flash(`${n}: 배너 알림을 ${m.alertOff?'껐습니다':'켰습니다'}`)}
   if(e.target.dataset.mdel){const i=+e.target.dataset.mdel;if(confirm(`'${db.macro[i].item||'(빈 항목)'}' 점검 항목을 삭제할까요?`)){db.macro.splice(i,1);save();renderMacro();render()}}
@@ -1928,6 +2012,13 @@ document.body.addEventListener('change',e=>{
   }
   if(el.classList&&el.classList.contains('rd')){
     const r=db.road[el.dataset.g]||(db.road[el.dataset.g]={...DEF_ROAD[el.dataset.g]});r[el.dataset.k]=el.value.trim();save();
+    return;
+  }
+  if(el.classList&&el.classList.contains('wi')){
+    const w=db.watch.find(x=>x.id===el.dataset.wid);
+    if(w){const k=el.dataset.k;if(k==='reason')w.reason=el.value.trim();else w[k]=parseFloat(el.value)||0;save();
+      setTimeout(()=>{const a=document.activeElement,id=a&&a.dataset&&a.dataset.wid,kk=a&&a.dataset&&a.dataset.k;render();
+        if(id){const nx=[...document.querySelectorAll('.wi')].find(x=>x.dataset.wid===id&&x.dataset.k===kk);if(nx){nx.focus();if(nx.select)nx.select()}}},0)}
     return;
   }
   if(!el.classList||!el.classList.contains('hin'))return;
