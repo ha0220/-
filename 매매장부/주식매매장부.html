@@ -290,6 +290,19 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
 <section id="t-flow" class="hide">
   <div class="card"><div class="kpis" id="flowKpi"></div></div>
   <div class="card">
+    <h2>🏦 ISA 납입한도 추적 <span class="note">입출금 기록의 ISA 계좌 입금(납입)을 모아 연 납입한도·총 납입한도·이월분·만기를 계산합니다</span></h2>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label>ISA 가입일</label><input type="date" id="isaOpen"></div>
+      <div><label>장부에 없는 기존 누적 납입액(원)</label><input type="number" id="isaPaidBefore" step="any"></div>
+      <div><label>그중 올해 납입분(원)</label><input type="number" id="isaPaidBeforeY" step="any"></div>
+      <div><label>연 납입한도(원)</label><input type="number" id="isaYearCap" step="any"></div>
+      <div><label>총 납입한도(원)</label><input type="number" id="isaTotalCap" step="any"></div>
+      <div><label>의무 가입기간(년)</label><input type="number" id="isaTerm" step="any"></div>
+    </div>
+    <div class="kpis" id="isaKpi"></div>
+    <div id="isaOut" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
     <h2 id="xTitle">입출금 기록 <span class="note">은행 ↔ 증권계좌 입금·출금 (계좌 간 이체는 한쪽 출금 + 다른 쪽 입금으로 두 건 기록)</span></h2>
     <div class="grid" id="xForm">
       <div><label>날짜</label><input type="date" id="xDate"></div>
@@ -488,7 +501,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
@@ -823,6 +836,34 @@ function watchToTrade(id){
   $('fSide').value='buy';$('fKind').value=w.kind;$('fName').value=w.name;$('fPrice').value=w.buy>0?w.buy:(db.prices[w.name]||'');
   $('fStop').value=w.stop||'';$('fTarget').value=w.target||'';$('fQty').value=it.qty||'';$('fReason').value=w.reason||'';
   checkForm();flash(`관심종목 → 매수 입력: ${w.name} (희망 매수가 기준, 수량은 손실 한도 기준 최대값이니 확인 후 추가하세요)`);window.scrollTo({top:0,behavior:'smooth'});
+}
+// ---------- ISA 납입한도 추적 ----------
+// 납입 = ISA 계좌의 입금 기록(출금해도 한도는 복원되지 않음). 가입일이 있으면 가입연도부터 미납입 한도를 이월해 계산
+function isaCap(){
+  const s=db.settings,t=todayStr(),yr=+t.slice(0,4),mo=+t.slice(5,7);
+  const ins=db.flows.filter(f=>isIsa(f.acct)&&f.type==='in');
+  const thisY=sumBy(ins.filter(f=>+f.date.slice(0,4)===yr),f=>f.amount)+(s.isaPaidBeforeY||0);
+  const total=sumBy(ins,f=>f.amount)+(s.isaPaidBefore||0),prior=total-thisY;
+  const openY=s.isaOpen?+s.isaOpen.slice(0,4):null;
+  const yearsN=openY!==null&&openY<=yr?yr-openY+1:null;
+  const cum=yearsN!==null?Math.min(s.isaYearCap*yearsN,s.isaTotalCap):s.isaYearCap;
+  const allowed=Math.max(0,yearsN!==null?cum-prior:Math.min(s.isaYearCap,s.isaTotalCap-prior));
+  const left=Math.max(0,allowed-thisY),totalLeft=Math.max(0,s.isaTotalCap-total);
+  let mat=null,days=null;
+  if(s.isaOpen&&s.isaTerm>0){const d=new Date(s.isaOpen+'T00:00:00Z');d.setUTCFullYear(d.getUTCFullYear()+Math.round(s.isaTerm));mat=d.toISOString().slice(0,10);days=daysBetween(t,mat)}
+  return {yr,thisY,total,prior,yearsN,cum,allowed,left:Math.min(left,totalLeft),totalLeft,over:thisY>allowed+1e-9?thisY-allowed:0,months:13-mo,mat,days,hasIsa:ins.length>0||total>0};
+}
+function renderIsa(){
+  const k=isaCap(),s=db.settings;
+  $('isaKpi').innerHTML=[['누적 납입 / 총 한도',`${fmt(k.total)} / ${fmt(s.isaTotalCap)}원`,''],['총 한도 잔여',fmt(k.totalLeft)+'원',''],[`올해(${k.yr}) 납입`,fmt(k.thisY)+'원',''],[`올해 추가 납입 가능${k.yearsN!==null?'(이월 포함)':''}`,fmt(k.left)+'원',k.over>0?'up':''],['남은 개월 평균(이번 달 포함)',k.months>0?fmt(k.left/k.months)+'원':'-',''],['만기(의무 가입기간)',k.mat?`${k.mat} (${k.days>=0?k.days+'일 남음':Math.abs(k.days)+'일 지남'})`:'가입일 입력 필요','']].map(([a,b,c2])=>`<div class="kpi"><span>${a}</span><b class="${c2}" style="font-size:${String(b).length>22?15:19}px">${b}</b></div>`).join('');
+  const bar=(v,m)=>`<div style="background:var(--line);border-radius:4px;height:8px;width:220px"><div style="width:${m>0?Math.min(100,v/m*100):0}%;background:${v>m?'var(--up)':'var(--pri)'};height:8px;border-radius:4px"></div></div>`;
+  $('isaOut').innerHTML=`<table><tr><th class="l">구분</th><th>사용</th><th>한도</th><th>사용률</th><th></th></tr>
+  <tr><td class="l">총 납입한도</td><td>${fmt(k.total)}</td><td>${fmt(s.isaTotalCap)}</td><td>${s.isaTotalCap>0?(k.total/s.isaTotalCap*100).toFixed(1)+'%':'-'}</td><td>${bar(k.total,s.isaTotalCap)}</td></tr>
+  <tr><td class="l">올해 납입한도${k.yearsN!==null?` (연 ${fmt(s.isaYearCap)} × ${k.yearsN}년 누적 한도에서 지난 납입 ${fmt(k.prior)} 차감)`:''}</td><td>${fmt(k.thisY)}</td><td>${fmt(k.allowed)}</td><td>${k.allowed>0?(k.thisY/k.allowed*100).toFixed(1)+'%':'-'}</td><td>${bar(k.thisY,k.allowed)}</td></tr></table>
+  ${k.over>0?`<div class="msg warn" style="margin-top:8px">⚠ 올해 납입이 한도를 ${fmt(k.over)}원 초과했습니다. 입금 기록(계좌·금액·날짜)이나 가입일·기존 납입액이 맞는지 확인하세요.</div>`:''}
+  <p class="note" style="margin-top:8px">· 납입은 <b>ISA 계좌(이름에 "ISA"가 들어간 계좌)로의 입금 기록</b>만 셉니다. 출금해도 납입한도는 복원되지 않는 것으로 계산합니다. 입금 기록이 장부 사용 이전에 있었다면 위 "기존 누적 납입액"(그중 올해분)에 직접 넣으세요.<br>
+  · 가입일을 넣으면 <b>가입연도부터 해마다 연 한도가 쌓이는 이월</b>을 반영해(올해까지 연 한도 × 연수, 총 한도 이내) 지금까지의 납입을 뺀 만큼을 올해 납입 가능액으로 봅니다. 가입일이 없으면 이월 없이 연 한도만 계산합니다.<br>
+  · <b>한도 금액과 의무 가입기간은 제가 아는 기준(연 2,000만원·총 1억원·3년)이며 세법 개정으로 바뀔 수 있어 직접 확인한 뒤 고쳐 쓰세요.</b> 일반형·서민형 비과세 한도는 설정 탭의 "ISA 비과세 한도"와 별개입니다. ISA 계좌가 여러 개로 나뉘어 있으면 모두 합쳐서 계산합니다(본인 명의 ISA는 1인 1계좌가 원칙). 최종 한도는 증권사·금융감독원 안내로 확인하세요.</p>`;
 }
 // ---------- 배당 포함 총수익률 ----------
 // 총손익 = 평가손익 + 실현손익(비용 차감 후) + 받은 분배금(실수령).  외부 투입 원금 = 매수금액(수수료·세금 포함) − 분배금 재투자 매수
@@ -1888,6 +1929,7 @@ function render(){
   renderReview(c);
   renderPlan(c);
   renderTotalReturn(c);
+  renderIsa();
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -1960,7 +2002,7 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('sRbCore').value=db.settings.rbCore;$('sRbIncome').value=db.settings.rbIncome;$('sRbBuffer').value=db.settings.rbBuffer;$('sRbBand').value=db.settings.rbBand;$('sBackupDays').value=db.settings.backupDays;$('rbNew').value=db.settings.rbNew||'';RT_IDS.forEach(id=>{$(id).value=db.settings[id]||''});$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('sRbCore').value=db.settings.rbCore;$('sRbIncome').value=db.settings.rbIncome;$('sRbBuffer').value=db.settings.rbBuffer;$('sRbBand').value=db.settings.rbBand;$('sBackupDays').value=db.settings.backupDays;$('rbNew').value=db.settings.rbNew||'';RT_IDS.forEach(id=>{$(id).value=db.settings[id]||''});['isaOpen','isaPaidBefore','isaPaidBeforeY','isaYearCap','isaTotalCap','isaTerm'].forEach(id=>{$(id).value=db.settings[id]||''});$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
@@ -2091,6 +2133,7 @@ $('btnSaveSet').onclick=()=>{
   db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;db.settings.ccLimit=parseFloat($('sCcLimit').value)||0;
   db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;db.settings.fiLimit=parseFloat($('sFiLimit').value)||0;db.settings.hiLimit=parseFloat($('sHiLimit').value)||0;db.settings.hiRate=parseFloat($('sHiRate').value)||0;db.settings.ltcRate=parseFloat($('sLtcRate').value)||0;db.settings.margTax=parseFloat($('sMargTax').value)||0;db.settings.goalMonthly=parseFloat($('sGoalMonthly').value)||0;db.settings.otherMonthly=parseFloat($('sOtherMonthly').value)||0;db.settings.rbCore=parseFloat($('sRbCore').value)||0;db.settings.rbIncome=parseFloat($('sRbIncome').value)||0;db.settings.rbBuffer=parseFloat($('sRbBuffer').value)||0;db.settings.rbBand=parseFloat($('sRbBand').value)||0;db.settings.backupDays=parseFloat($('sBackupDays').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
 };
+['isaOpen','isaPaidBefore','isaPaidBeforeY','isaYearCap','isaTotalCap','isaTerm'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=id==='isaOpen'?$(id).value:(parseFloat($(id).value)||0);save();render()}});
 RT_IDS.forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 ['fiOther','fiAsset','fiYield','rbNew'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
