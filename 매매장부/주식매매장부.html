@@ -235,12 +235,22 @@ h3{font-size:14px;margin:14px 0 6px}
       <div><label>금액(원)</label><input type="number" id="xAmt" min="0" step="any" inputmode="decimal"></div>
       <div style="grid-column:span 2"><label>메모</label><input id="xMemo" placeholder="예: ISA 납입, 생활비 출금"></div>
     </div>
-    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin:10px 0 0"><input type="checkbox" id="xCash" checked style="width:auto"> 해당 계좌 예수금에 반영 (입금 +, 출금 −)</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx);margin:10px 0 0"><input type="checkbox" id="xCash" checked style="width:auto"> 해당 계좌 예수금에 반영 (입금 +, 출금 −, 아래 붙여넣기에도 적용)</label>
     <p class="note" style="margin:6px 0 0">이미 예수금을 증권사 실제 잔고로 맞춰 뒀다면 해제하고 입력하세요(이중 계산 방지). 수정·삭제하면 반영했던 금액이 자동으로 되돌려집니다.</p>
     <div class="bar" style="margin:12px 0 0">
       <button class="pri" id="btnXAdd">추가 (Enter)</button>
       <button id="btnXCancel" class="hide">수정 취소</button>
     </div>
+  </div>
+  <div class="card">
+    <h2>은행 입출금 내역 붙여넣기</h2>
+    <p class="note" style="margin:0 0 8px">은행 앱·인터넷뱅킹 거래내역을 복사해 붙이면 됩니다. 한 줄에 한 건이며 아래 형식을 읽습니다.<br>
+    ① <code>2026-10-05 입금 500,000 월급</code> (날짜·시각·잔액이 섞여 있어도 첫 금액을 거래액으로, 나머지 금액은 잔액으로 보고 무시)<br>
+    ② 부호 금액: <code>2026.10.07 -50,000 카드대금</code> (− 출금, + 입금) ③ 엑셀 표: 머리글에 <b>출금</b>·<b>입금</b> 열이 있으면 열 위치로 읽습니다.<br>
+    줄 안에 <code>종합위탁</code>·<code>ISA</code>가 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 이미 기록한 내역과 같은 줄(날짜·계좌·구분·금액·메모)은 <b>중복으로 건너뜁니다</b>.</p>
+    <textarea id="xPaste" placeholder="2026-10-05	입금	500,000	월급 이체"></textarea>
+    <div class="bar" style="margin:10px 0 0"><button id="btnXParse">미리보기</button><button class="pri" id="btnXApply">반영</button></div>
+    <div id="xPasteOut"></div>
   </div>
   <div class="card"><h2>월별 입출금</h2><div class="tw" id="flowMonth"></div></div>
   <div class="card">
@@ -839,6 +849,83 @@ function toggleFlowCash(id){
   const v=db.cash[f.acct||'']||0;
   flash(`${f.type==='in'?'입금':'출금'} ${fmt(f.amount)}원 ${f.cash?'예수금에 반영했습니다':'예수금 반영을 취소했습니다'} · ${acctLabel(f.acct)} 예수금 ${fmt(v)}원`,v<0?'warn':'ok');
 }
+// ---------- 은행 입출금 붙여넣기 ----------
+const numTok=k=>{const n=k.replace(/[,원]/g,'');return /^[-+]?\d+(\.\d+)?$/.test(n)?parseFloat(n):null};
+function bankDate(tok){
+  const ok=(y,mo,d)=>y>=1990&&y<=2100&&mo>=1&&mo<=12&&d>=1&&d<=31;
+  let m=tok.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/)||tok.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if(m&&ok(+m[1],+m[2],+m[3]))return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=tok.match(/^(\d{1,2})[./-](\d{1,2})$/); // 연도 없는 날짜는 올해로, 오늘보다 미래면 작년으로 본다
+  if(m&&ok(2000,+m[1],+m[2])){const t=todayStr();const y=Number(t.slice(0,4));let d=`${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;if(d>t)d=`${y-1}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;return d}
+  return null;
+}
+function parseBankPaste(text){
+  const out=[],bad=[],defAcct=$('xAcct').value.trim();let cols=null;
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;
+    const cells=raw.split('\t').map(x=>x.trim());
+    // 엑셀 표: 머리글에 출금·입금 열이 있으면 열 위치로 읽는다 (머리글에는 숫자가 없으므로 숫자 검사보다 먼저)
+    if(cells.length>=3){
+      const iO=cells.findIndex(c=>/출금/.test(c)),iI=cells.findIndex(c=>/입금/.test(c));
+      if(iO>=0&&iI>=0&&iO!==iI&&!cells.some(c=>numTok(c)!==null)){
+        cols={o:iO,i:iI,d:cells.findIndex(c=>/일자|일시|날짜|거래일/.test(c)),m:cells.map((c,k)=>/적요|내용|기재|메모|받는|보낸|상대|구분/.test(c)?k:-1).filter(k=>k>=0)};
+        continue;
+      }
+    }
+    if(!/\d/.test(line))continue; // 숫자가 없는 줄(머리글 등)은 건너뜀
+    if(cols&&cells.length>=3){
+      const o=numTok(cells[cols.o]||''),i=numTok(cells[cols.i]||''),date=bankDate((cells[cols.d>=0?cols.d:0]||'').split(' ')[0]);
+      const memo=cols.m.map(k=>cells[k]).filter(Boolean).join(' ');
+      if(!date||((!(o>0))&&(!(i>0)))||(o>0&&i>0)){bad.push(line);continue}
+      out.push({date,acct:defAcct,type:i>0?'in':'out',amount:Math.abs(i>0?i:o),memo});
+      continue;
+    }
+    // 한 줄 형식
+    const toks=(line.includes('\t')?cells:line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s+/)).map(x=>x.trim()).filter(Boolean);
+    let date=null,acct=null,dir=null;const nums=[],memo=[];
+    for(const k of toks){
+      const d=!date&&bankDate(k.split(' ')[0]);
+      if(d){date=d;if(k.includes(' ')){const rest=k.split(' ').slice(1).join(' ');if(rest&&!/^\d{1,2}:\d{2}(:\d{2})?$/.test(rest))memo.push(rest)}continue}
+      if(/^\d{1,2}:\d{2}(:\d{2})?$/.test(k))continue; // 시각
+      if(!acct&&/^종합위탁$|^위탁$/.test(k)){acct='종합위탁';continue}
+      if(!acct&&/^(중개형\s*)?ISA$/i.test(k)){acct='중개형 ISA';continue}
+      if(!dir&&/^(입금|입금액)$/.test(k)){dir='in';continue}
+      if(!dir&&/^(출금|출금액)$/.test(k)){dir='out';continue}
+      const n=numTok(k);if(n!==null){nums.push({n,signed:/^[-+]/.test(k.replace(/[,원]/g,''))});continue}
+      memo.push(k);
+    }
+    if(!nums.length||!(Math.abs(nums[0].n)>0)){bad.push(line);continue}
+    if(!dir){
+      if(nums[0].signed)dir=nums[0].n<0?'out':'in';
+      else{const t=memo.join(' '),hi=/입금/.test(t),ho=/출금/.test(t);if(hi!==ho)dir=hi?'in':'out'}
+    }
+    if(!dir){bad.push(line);continue}
+    out.push({date:date||todayStr(),acct:acct??defAcct,type:dir,amount:Math.abs(nums[0].n),memo:memo.join(' ')});
+  }
+  // 이미 기록한 내역과 같은 줄은 중복으로 표시 (같은 내역이 여러 건이면 기록된 건수만큼만 소진)
+  const pool=db.flows.map(f=>`${f.date}|${f.acct||''}|${f.type}|${f.amount}|${f.memo||''}`);
+  out.forEach(f=>{const k=`${f.date}|${f.acct||''}|${f.type}|${f.amount}|${f.memo||''}`,i=pool.indexOf(k);if(i>=0){pool.splice(i,1);f.dup=true}});
+  return {out,bad};
+}
+function previewBank(){
+  const {out,bad}=parseBankPaste($('xPaste').value);let h='';
+  if(out.length)h+=`<div class="tw"><table><tr><th>날짜</th><th class="l">계좌</th><th>구분</th><th>금액</th><th class="l">메모</th><th class="l">상태</th></tr>${out.map(f=>`<tr><td class="l">${f.date}</td><td class="l">${esc(acctLabel(f.acct))}</td><td class="${f.type==='in'?'buy':'sell'}">${f.type==='in'?'입금':'출금'}</td><td>${fmt(f.amount)}</td><td class="l note">${esc(f.memo)}</td><td class="l ${f.dup?'note':''}">${f.dup?'이미 기록됨 — 건너뜀':'새 내역'}</td></tr>`).join('')}</table></div>`;
+  if(bad.length)h+=`<div class="msg warn">읽지 못한 줄 ${bad.length}건 (날짜·금액·입금/출금 방향을 확인하세요):<br>${bad.map(esc).join('<br>')}</div>`;
+  $('xPasteOut').innerHTML=h;return {out,bad};
+}
+function applyBank(){
+  const {out,bad}=previewBank();
+  const add=out.filter(f=>!f.dup),skip=out.length-add.length;
+  if(!add.length){flash(skip?`새로 반영할 내역이 없습니다 (중복 ${skip}건)`:'반영할 입출금 내역이 없습니다','warn');return}
+  if(bad.length&&!confirm(`읽지 못한 줄 ${bad.length}건은 빼고 ${add.length}건만 반영할까요?`))return;
+  const on=$('xCash').checked,accts=new Set();
+  add.forEach(f=>{const r={id:uid(),date:f.date,acct:f.acct,type:f.type,amount:f.amount,memo:f.memo,cash:on};db.flows.push(r);if(on){flowCash(r,1);accts.add(r.acct||'')}});
+  save();$('xPaste').value='';$('xPasteOut').innerHTML='';render();
+  const ins=sumBy(add.filter(f=>f.type==='in'),f=>f.amount),outs=sumBy(add.filter(f=>f.type==='out'),f=>f.amount);
+  const neg=[...accts].filter(a=>(db.cash[a]||0)<0);
+  flash(`입출금 ${add.length}건 반영 (입금 ${fmt(ins)}원 / 출금 ${fmt(outs)}원)`+(skip?` · 중복 ${skip}건 건너뜀`:'')+(on?` · 예수금에 반영`:' · 예수금에는 반영하지 않음')+(neg.length?` ⚠ 예수금 마이너스: ${neg.map(acctLabel).join(', ')}`:''),neg.length?'warn':'ok');
+}
+
 function renderFlow(){
   const today=todayStr(),yr=today.slice(0,4),ym=today.slice(0,7);
   const ins=a=>sumBy(a.filter(f=>f.type==='in'),f=>f.amount),outs=a=>sumBy(a.filter(f=>f.type==='out'),f=>f.amount);
@@ -1194,6 +1281,8 @@ $('btnXAdd').onclick=addFlow;
 $('btnXCancel').onclick=clearFlowForm;
 $('xForm').addEventListener('keydown',e=>{if(e.key==='Enter')addFlow()});
 $('btnXCsv').onclick=downloadFlowCsv;
+$('btnXParse').onclick=previewBank;
+$('btnXApply').onclick=applyBank;
 $('btnDAdd').onclick=addDiv;
 $('dForm').addEventListener('input',updateRePreview);
 $('dRe').onchange=updateRePreview;
