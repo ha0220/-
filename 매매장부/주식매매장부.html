@@ -46,6 +46,11 @@ td input.t{text-align:left}
 .msg.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 pre{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:12px;font-size:13px;margin:0 0 10px}
 .hide{display:none}
+.alerts{border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--card));border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.alerts h2{font-size:14px;margin:0 0 6px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.alerts .al{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);font-size:14px}
+.alerts .al span.n{flex:1}
+button.bell{padding:1px 6px;font-size:12px;margin-left:6px}
 .note{font-size:12px;color:var(--sub)}
 #chk{margin-top:10px;font-size:13px;color:var(--warn)}
 #chk div{margin-bottom:2px}
@@ -64,6 +69,7 @@ h3{font-size:14px;margin:14px 0 6px}
   <input type="file" id="fileRestore" accept=".json" class="hide">
 </div>
 <div id="msg"></div>
+<div id="alertBar"></div>
 <div class="tabs" id="tabs">
   <button data-t="today" class="on">오늘 입력</button>
   <button data-t="dash">대시보드</button>
@@ -320,6 +326,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
       <div><label>최소 손익비 (1 : N)</label><input type="number" id="sRrMin" step="any"></div>
       <div><label>손실 심화주 기준 수익률(%)</label><input type="number" id="sLossDeep" step="any"></div>
       <div><label>극소량주 기준 (계좌 내 비중 %)</label><input type="number" id="sTinyW" step="any"></div>
+      <div><label>목표가·손절가 근접 알림 기준(%) — 0이면 근접 알림 끔</label><input type="number" id="sNearPct" step="any"></div>
     </div>
     <h3>ISA 비과세 한도 (예상 분배금 계산용)</h3>
     <div class="grid">
@@ -367,7 +374,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -377,7 +384,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -419,12 +426,59 @@ function compute(){
   return {pos,rows,errors,sorted};
 }
 function heldList(c){return Object.values(c.pos).filter(p=>p.qty>0)}
+// 가격 알림 단계: 손절선 이탈·목표가 도달(2) > 근접(1). 근접 기준은 설정의 nearPct(%), 0이면 끔
+const ALERT_KINDS={
+  stop:{side:'S',rank:2,icon:'🔴',label:'손절선 이탈'},target:{side:'T',rank:2,icon:'🟢',label:'목표가 도달'},
+  nearStop:{side:'S',rank:1,icon:'🟠',label:'손절선 근접'},nearTarget:{side:'T',rank:1,icon:'🟡',label:'목표가 근접'}};
+function alertOf(name){
+  const px=db.prices[name],m=db.meta[name]||{},w=db.settings.nearPct||0;
+  if(!(px>0))return null;
+  if(m.stop>0&&px<=m.stop)return {key:'stop',px,ref:m.stop,gap:(px-m.stop)/m.stop*100};
+  if(m.target>0&&px>=m.target)return {key:'target',px,ref:m.target,gap:(px-m.target)/m.target*100};
+  if(w>0){
+    if(m.stop>0&&(px-m.stop)/px*100<=w)return {key:'nearStop',px,ref:m.stop,gap:(m.stop-px)/px*100};
+    if(m.target>0&&(m.target-px)/px*100<=w)return {key:'nearTarget',px,ref:m.target,gap:(m.target-px)/px*100};
+  }
+  return null;
+}
 function status(p){
-  const px=db.prices[p.name],m=db.meta[p.name]||{};
-  if(!(px>0))return '';
-  if(m.stop>0&&px<=m.stop)return '🔴 손절선 이탈';
-  if(m.target>0&&px>=m.target)return '🟢 목표가 도달';
-  return '';
+  const a=alertOf(p.name);if(!a)return '';
+  const k=ALERT_KINDS[a.key];
+  return `${k.icon} ${k.label}`+(a.key.startsWith('near')?` (${pct(a.gap)})`:'');
+}
+// 이미 확인한 알림은 다시 띄우지 않되, 같은 방향에서 더 강해지거나(근접→도달) 반대 방향이 되면 다시 알린다
+function alertPending(key,ack){
+  if(!ack)return true;
+  if(ack===key)return false;
+  const a=ALERT_KINDS[ack],k=ALERT_KINDS[key];
+  return !(a&&a.side===k.side&&k.rank<a.rank);
+}
+// 보유 종목(이름 기준, 계좌 합침)별 알림. 끈 종목(meta.alertOff)은 제외
+function alertItems(c){
+  const by={};
+  heldList(c).forEach(p=>{(by[p.name]||(by[p.name]={name:p.name,accts:[]})).accts.push(p.acct)});
+  const rank={stop:0,target:1,nearStop:2,nearTarget:3};
+  return Object.values(by).map(x=>({...x,a:alertOf(x.name),m:db.meta[x.name]||{}})).filter(x=>x.a&&!x.m.alertOff)
+    .map(x=>({...x,key:x.a.key,pending:alertPending(x.a.key,db.alertAck[x.name])}))
+    .sort((a,b)=>rank[a.key]-rank[b.key]||a.name.localeCompare(b.name));
+}
+// 알림이 사라졌거나 더 이상 보유하지 않는 종목의 확인 기록은 지운다(다음에 다시 걸리면 새로 알림)
+function pruneAcks(c){
+  const live=new Set(alertItems(c).map(x=>x.name));let ch=false;
+  Object.keys(db.alertAck).forEach(n=>{if(!live.has(n)){delete db.alertAck[n];ch=true}});
+  if(ch)save();
+}
+function alertSnap(c){const o={};alertItems(c).filter(x=>x.pending).forEach(x=>{o[x.name]=x.key});return o}
+function renderAlerts(c){
+  pruneAcks(c);
+  const list=alertItems(c).filter(x=>x.pending);
+  document.title=(list.length?`(${list.length}) `:'')+'주식 매매 관리 장부';
+  if(!list.length){$('alertBar').innerHTML='';return}
+  $('alertBar').innerHTML=`<div class="alerts"><h2><span>🔔 가격 알림 ${list.length}건</span><button class="sm" data-ackall="1">모두 확인</button></h2>${list.map(x=>{
+    const k=ALERT_KINDS[x.key],a=x.a,near=x.key.startsWith('near');
+    const msg=near?`현재가 ${fmt(a.px)} · ${x.key==='nearStop'?'손절가':'목표가'} ${fmt(a.ref)}까지 ${pct(a.gap)}`:`현재가 ${fmt(a.px)} ${x.key==='stop'?'≤ 손절가':'≥ 목표가'} ${fmt(a.ref)}`;
+    const act=x.key==='stop'?'손절 원칙 점검':x.key==='target'?'익절 계획 점검':'';
+    return `<div class="al"><span class="n">${k.icon} <b>${esc(x.name)}</b> <span class="note">(${x.accts.map(a=>esc(acctLabel(a))).join(', ')})</span> ${k.label} — ${msg}${act?` · ${act}`:''}${x.m.plan?` <span class="note">대응: ${esc(x.m.plan)}</span>`:''}</span><button class="sm" data-ack="${esc(x.name)}">확인</button></div>`}).join('')}<div class="note" style="margin-top:6px">"확인"하면 같은 상태에서는 다시 띄우지 않습니다(근접→도달·반대 방향이면 다시 알림). 종목별로 끄려면 보유 현황의 🔔 버튼을 누르세요.</div></div>`;
 }
 function allAccts(c){
   const s=new Set(ACCTS);
@@ -1018,11 +1072,13 @@ function previewPrices(){
 function applyPrices(){
   const r=previewPrices();
   if(!r.rows.length){flash('반영할 현재가가 없습니다','warn');return false}
+  const before=alertSnap(compute());
   r.rows.forEach(x=>{db.prices[x.name]=x.price});
   const d=new Date();db.pricesAt=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16).replace('T',' ');
   save();$('pricePaste').value='';$('pricePasteOut').innerHTML='';render();
   const big=r.rows.filter(x=>x.chg!==null&&Math.abs(x.chg)>=30).length;
-  flash(`현재가 ${r.rows.length}종목 갱신`+(r.missing.length?` · 미갱신 ${r.missing.length}종목`:'')+(big?` · ⚠ 변동 30% 이상 ${big}종목 확인`:''),big||r.missing.length?'warn':'ok');
+  const fresh=Object.entries(alertSnap(compute())).filter(([n,k])=>before[n]!==k);
+  flash(`현재가 ${r.rows.length}종목 갱신`+(r.missing.length?` · 미갱신 ${r.missing.length}종목`:'')+(big?` · ⚠ 변동 30% 이상 ${big}종목 확인`:'')+(fresh.length?` · 🔔 새 가격 알림 ${fresh.length}건`:''),big||r.missing.length||fresh.length?'warn':'ok');
   return r.rows.length;
 }
 
@@ -1256,7 +1312,7 @@ function render(){
     const px=db.prices[p.name]||0,m=db.meta[p.name]||{};
     const v=px>0?px*p.qty:null,pl=v===null?null:v-p.cost;
     const w=s.val>0?((v===null?p.cost:v)/s.val*100).toFixed(2)+'%':'-';
-    return `<tr><td class="l">${esc(p.name)}</td><td>${inp('sector|'+p.name,m.sector,'t')}</td><td>${fmt(p.qty)}</td><td>${fmt(p.cost/p.qty)}</td><td>${inp('px|'+p.name,px)}</td><td>${fmt(p.cost)}</td><td>${v===null?'-':fmt(v)}</td><td class="${cls(pl)}">${pl===null?'-':fmtS(pl)}</td><td class="${cls(pl)}">${pl===null?'-':pct(pl/p.cost*100)}</td><td>${w}</td><td>${inp('target|'+p.name,m.target)}</td><td>${inp('stop|'+p.name,m.stop)}</td><td class="l">${status(p)}</td><td>${inp('plan|'+p.name,m.plan,'t')}</td><td>${inp('guide|'+p.name,m.guide,'t','예: ISA 한도 내 분배금 재투자')}</td></tr>`}).join('')}</table></div></div>`).join('');
+    return `<tr><td class="l">${esc(p.name)}</td><td>${inp('sector|'+p.name,m.sector,'t')}</td><td>${fmt(p.qty)}</td><td>${fmt(p.cost/p.qty)}</td><td>${inp('px|'+p.name,px)}</td><td>${fmt(p.cost)}</td><td>${v===null?'-':fmt(v)}</td><td class="${cls(pl)}">${pl===null?'-':fmtS(pl)}</td><td class="${cls(pl)}">${pl===null?'-':pct(pl/p.cost*100)}</td><td>${w}</td><td>${inp('target|'+p.name,m.target)}</td><td>${inp('stop|'+p.name,m.stop)}</td><td class="l">${status(p)}<button class="bell" data-bell="${esc(p.name)}" title="${m.alertOff?'이 종목 알림이 꺼져 있습니다. 누르면 켭니다':'누르면 이 종목의 배너 알림을 끕니다'}">${m.alertOff?'🔕':'🔔'}</button></td><td>${inp('plan|'+p.name,m.plan,'t')}</td><td>${inp('guide|'+p.name,m.guide,'t','예: ISA 한도 내 분배금 재투자')}</td></tr>`}).join('')}</table></div></div>`).join('');
   // 예상 분배금
   const inc=incomeRows(c),it=incomeTotals(inc);
   $('incomeTable').innerHTML=inc.length?`<table><tr><th>계좌</th><th class="l">종목명</th><th>보유수량</th><th>평가금액</th><th>비중</th><th>배당 주기</th><th>연간 예상 배당률(%)</th><th>예상 월 분배금</th><th>예상 연 배당금</th></tr>${inc.map(r=>`<tr><td class="l">${esc(acctLabel(r.p.acct))}</td><td class="l">${esc(r.p.name)}</td><td>${fmt(r.p.qty)}</td><td>${fmt(r.val)}</td><td>${it.val>0?(r.val/it.val*100).toFixed(2)+'%':'-'}</td><td><input class="hin t" data-id="cycle|${esc(r.p.name)}" list="cycleList" value="${esc(r.m.cycle||'')}" style="width:100px"></td><td>${inp('yield|'+r.p.name,r.m.yield)}</td><td>${r.y>0?fmt(r.monthly):'-'}</td><td>${r.y>0?fmt(r.yearly):'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td class="l">${inc.length}개 종목</td><td></td><td>${fmt(it.val)}</td><td>100.00%</td><td>월 환산</td><td>${it.rate.toFixed(2)}%</td><td><b>${fmt(it.monthly)}</b></td><td><b>${fmt(it.yearly)}</b></td></tr></table>`:'<p class="note">ETF나 ISA 계좌 보유 종목이 없습니다.</p>';
@@ -1265,6 +1321,7 @@ function render(){
   renderDiv(c);
   $('priceStamp').textContent=db.pricesAt?`현재가 마지막 일괄 갱신: ${db.pricesAt} (붙여넣기 기준, 개별 입력은 포함하지 않음)`:'현재가는 직접 입력하거나, 오늘 입력 탭의 "현재가 붙여넣기"로 한 번에 갱신할 수 있습니다.';
   renderFlow();
+  renderAlerts(c);
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -1335,7 +1392,7 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('dashMemo').value=db.memo||'';
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('dashMemo').value=db.memo||'';
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
@@ -1408,6 +1465,9 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.fd)delFlow(e.target.dataset.fd);
   if(e.target.dataset.fc)toggleFlowCash(e.target.dataset.fc);
   if(e.target.dataset.tc)toggleTradeCash(e.target.dataset.tc);
+  if(e.target.dataset.ack){const it=alertItems(compute()).find(x=>x.name===e.target.dataset.ack);if(it){db.alertAck[it.name]=it.key;save();render()}}
+  if(e.target.dataset.ackall){alertItems(compute()).forEach(x=>{db.alertAck[x.name]=x.key});save();render()}
+  if(e.target.dataset.bell){const n=e.target.dataset.bell,m=db.meta[n]||(db.meta[n]={});if(m.alertOff)delete m.alertOff;else m.alertOff=true;save();render();flash(`${n}: 배너 알림을 ${m.alertOff?'껐습니다':'켰습니다'}`)}
   if(e.target.dataset.mdel){const i=+e.target.dataset.mdel;if(confirm(`'${db.macro[i].item||'(빈 항목)'}' 점검 항목을 삭제할까요?`)){db.macro.splice(i,1);save();renderMacro();render()}}
 });
 // 보유현황 표의 입력칸: 현재가·목표가·손절가·섹터·전략·예수금
@@ -1445,7 +1505,7 @@ $('btnSaveSet').onclick=()=>{
   db.settings.fee=parseFloat($('sFee').value)||0;db.settings.taxStock=parseFloat($('sTaxStock').value)||0;
   db.settings.taxEtf=parseFloat($('sTaxEtf').value)||0;db.settings.auto=$('sAuto').checked;
   db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;db.settings.ccLimit=parseFloat($('sCcLimit').value)||0;
-  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
+  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
 };
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
 $('btnWipe').onclick=()=>{
