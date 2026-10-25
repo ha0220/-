@@ -349,6 +349,13 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <textarea id="rvNote" placeholder="예: 손절 기준가 없이 산 종목이 손실의 대부분 → 다음 달은 입력 전 매수 금지"></textarea>
     <div class="bar" style="margin:10px 0 0"><button id="btnRvCopy">📋 복기 리포트 복사</button></div>
   </div>
+  <div class="card">
+    <h2>📈 배당 포함 총수익률</h2>
+    <div class="kpis" id="trKpi"></div>
+    <div class="tw" id="trAcct" style="margin-top:10px"></div>
+    <div class="tw" id="trTable" style="margin-top:10px"></div>
+    <div class="note" id="trNote" style="margin-top:8px"></div>
+  </div>
   <div class="card"><h2>월별 실현손익 (이동평균법, 비용 차감 후)</h2><div class="tw" id="pnlMonth"></div></div>
   <div class="card"><h2>종목별 실현손익</h2><div class="tw" id="pnlName"></div></div>
 </section>
@@ -816,6 +823,43 @@ function watchToTrade(id){
   $('fSide').value='buy';$('fKind').value=w.kind;$('fName').value=w.name;$('fPrice').value=w.buy>0?w.buy:(db.prices[w.name]||'');
   $('fStop').value=w.stop||'';$('fTarget').value=w.target||'';$('fQty').value=it.qty||'';$('fReason').value=w.reason||'';
   checkForm();flash(`관심종목 → 매수 입력: ${w.name} (희망 매수가 기준, 수량은 손실 한도 기준 최대값이니 확인 후 추가하세요)`);window.scrollTo({top:0,behavior:'smooth'});
+}
+// ---------- 배당 포함 총수익률 ----------
+// 총손익 = 평가손익 + 실현손익(비용 차감 후) + 받은 분배금(실수령).  외부 투입 원금 = 매수금액(수수료·세금 포함) − 분배금 재투자 매수
+function trData(c){
+  const by={};
+  const get=(acct,name)=>by[pk(acct,name)]||(by[pk(acct,name)]={acct:acct||'',name,ext:0,divNet:0,divGross:0});
+  db.trades.forEach(t=>{const o=get(t.acct,t.name);if(t.side==='buy'&&t.type!=='분배금 재투자')o.ext+=t.qty*t.price+t.fee+t.tax});
+  let otherNet=0,otherGross=0,otherN=0;
+  db.divs.forEach(d=>{
+    let o=by[pk(d.acct,d.name)];
+    if(!o){const cand=Object.values(by).filter(x=>x.name===d.name);if(cand.length===1)o=cand[0]}
+    if(o){o.divNet+=d.gross-d.tax;o.divGross+=d.gross}else{otherNet+=d.gross-d.tax;otherGross+=d.gross;otherN++}
+  });
+  const rows=Object.values(by).map(o=>{
+    const p=c.pos[pk(o.acct,o.name)]||{qty:0,cost:0,realized:0},px=db.prices[o.name];
+    const held=p.qty>0,val=held?(px>0?px*p.qty:p.cost):0,unreal=held?val-p.cost:0;
+    const total=unreal+p.realized+o.divNet;
+    return {...o,held,qty:p.qty,cost:p.cost,val,unreal,real:p.realized,total,noPrice:held&&!(px>0),
+      priceRet:held&&p.cost>0?unreal/p.cost*100:null,totRet:o.ext>0?total/o.ext*100:null,divContrib:o.ext>0?o.divNet/o.ext*100:null};
+  }).sort((a,b)=>b.total-a.total);
+  const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+  const mk=a=>{const ext=sum(a,x=>x.ext),div=sum(a,x=>x.divNet),total=sum(a,x=>x.total),cost=sum(a,x=>x.cost),unreal=sum(a,x=>x.unreal);
+    return {ext,div,total,cost,unreal,real:sum(a,x=>x.real),totRet:ext>0?total/ext*100:null,priceRet:cost>0?unreal/cost*100:null,divContrib:ext>0?div/ext*100:null}};
+  const all=mk(rows);all.total+=otherNet;all.div+=otherNet;
+  all.totRet=all.ext>0?all.total/all.ext*100:null;all.divContrib=all.ext>0?all.div/all.ext*100:null;
+  const accts={};rows.forEach(r=>(accts[r.acct]||(accts[r.acct]=[])).push(r));
+  return {rows,all,otherNet,otherGross,otherN,accts:Object.entries(accts).map(([a,rs])=>({acct:a,...mk(rs)})),noPrice:rows.filter(r=>r.noPrice).length};
+}
+function renderTotalReturn(c){
+  const d=trData(c),a=d.all,R=v=>v===null?'-':pct(v);
+  $('trKpi').innerHTML=[['배당 포함 총수익률',R(a.totRet),a.totRet===null?'':cls(a.totRet)],['총손익',fmtS(a.total)+'원',cls(a.total)],['가격 수익률(보유분)',R(a.priceRet),a.priceRet===null?'':cls(a.priceRet)],['받은 분배금(실수령)',fmt(a.div)+'원',''],['분배금 기여',a.divContrib===null?'-':a.divContrib.toFixed(2)+'%p',''],['외부 투입 원금',fmt(a.ext)+'원','']].map(([x,y,k])=>`<div class="kpi"><span>${x}</span><b class="${k}">${y}</b></div>`).join('');
+  const head='<th>평가손익</th><th>실현손익</th><th>받은 분배금(실수령)</th><th>총손익</th><th>외부 투입 원금</th><th>가격 수익률</th><th>총수익률</th><th>분배금 기여(%p)</th>';
+  const cells=r=>`<td class="${cls(r.unreal)}">${fmtS(r.unreal)}</td><td class="${cls(r.real)}">${fmtS(r.real)}</td><td>${fmt(r.divNet)}</td><td class="${cls(r.total)}"><b>${fmtS(r.total)}</b></td><td>${fmt(r.ext)}</td><td class="${r.priceRet===null?'':cls(r.priceRet)}">${R(r.priceRet)}</td><td class="${r.totRet===null?'':cls(r.totRet)}"><b>${R(r.totRet)}</b></td><td>${r.divContrib===null?'-':r.divContrib.toFixed(2)}</td>`;
+  $('trAcct').innerHTML=d.accts.length?`<table><tr><th class="l">계좌</th>${head}</tr>${d.accts.map(r=>`<tr><td class="l">${esc(acctLabel(r.acct))}</td>${cells(r)}</tr>`).join('')}</table>`:'';
+  $('trTable').innerHTML=d.rows.length?`<table><tr><th class="l">종목</th><th class="l">계좌</th><th>상태</th>${head}</tr>${d.rows.map(r=>`<tr><td class="l">${esc(r.name)}</td><td class="l">${esc(acctLabel(r.acct))}</td><td>${r.held?(r.noPrice?'보유 (현재가 없음)':'보유'):'청산'}</td>${cells(r)}</tr>`).join('')}${d.otherN?`<tr><td class="l" colspan="2">연결되지 않은 분배금 ${d.otherN}건</td><td></td><td>-</td><td>-</td><td>${fmt(d.otherNet)}</td><td>${fmtS(d.otherNet)}</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`:''}</table>`:'<p class="note">거래 기록이 없습니다.</p>';
+  $('trNote').innerHTML=`· <b>총손익</b> = 평가손익(현재가 기준) + 실현손익(이동평균법, 수수료·세금 차감 후) + 받은 분배금(원천징수 후 실수령). <b>외부 투입 원금</b> = 지금까지 매수한 금액(수수료·세금 포함)에서 <b>분배금 재투자 매수</b>를 뺀 값이라, 분배금을 재투자해도 분모가 부풀지 않습니다. <b>총수익률</b> = 총손익 ÷ 외부 투입 원금, <b>분배금 기여</b> = 받은 분배금 ÷ 외부 투입 원금입니다.<br>
+  · 기간을 반영하지 않은 누적 수익률(연환산 아님)입니다. 기초 보유 종목은 입력한 평균 매입단가가 원금입니다. 청산한 종목의 실현손익과 분배금도 포함합니다.${d.noPrice?`<br>· ⚠ 현재가가 없는 보유 종목 ${d.noPrice}개는 평가손익을 0으로 계산했습니다.`:''}${d.otherN?`<br>· 종목명·계좌가 매매 기록과 맞지 않아 연결하지 못한 분배금 ${d.otherN}건(실수령 ${fmt(d.otherNet)}원)은 합계에만 넣었습니다. 분배금 종목명을 매매 기록과 같게 적으세요.`:''}`;
 }
 // ---------- 백업 알림 · 데이터 점검 ----------
 function backupInfo(){
@@ -1683,6 +1727,7 @@ function dashComments(d){
     L.push(`현금성 자산 비중 ${(d.tcash/d.total*100).toFixed(1)}%`);
   }
   if(d.inc.monthly>0)L.push(`예상 월 분배금 ${fmt(d.inc.monthly)}원 / 올해 받은 분배금(세전) ${fmt(d.divYear)}원`);
+  {const t=trData(d.c).all;if(t.totRet!==null)L.push(`배당 포함 총수익률 ${pct(t.totRet)} (가격 수익률 ${t.priceRet===null?'-':pct(t.priceRet)}, 분배금 기여 ${t.divContrib.toFixed(2)}%p)`)}
   {const wa=watchItems(d.c).filter(x=>x.a);if(wa.length)L.push('관심종목 가격 알림: '+wa.map(x=>`${x.w.name}(${WLABEL[x.a.key][1]})`).join(', '))}
   {const w=dataChecks(d.c).filter(x=>x.lv==='warn').length;if(w)L.push(`데이터 점검: ⚠ ${w}건 확인 필요 (설정 탭 > 데이터 점검)`)}
   if(d.rb.out.length)L.push('리밸런싱 점검: '+d.rb.out.map(r=>`${r.k} ${r.cw.toFixed(1)}%(목표 ${r.tw.toFixed(0)}%, ${r.diff>0?'+':''}${r.diff.toFixed(1)}%p)`).join(', ')+` — 허용 편차 ±${db.settings.rbBand}%p 초과`);
@@ -1842,6 +1887,7 @@ function render(){
   renderChecks(c);
   renderReview(c);
   renderPlan(c);
+  renderTotalReturn(c);
   renderDash(c);
   renderRules(c);
   // 매매일지
