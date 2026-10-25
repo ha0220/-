@@ -163,6 +163,14 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     </div>
   </div>
   <div class="card">
+    <h2>리밸런싱 도우미 (코어 · 인컴 · 완충)</h2>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label>이번에 새로 넣을 돈(원) — 분배금·입금 등. 매도 없이 부족한 층에 배분</label><input type="number" id="rbNew" step="any"></div>
+    </div>
+    <div class="tw" id="rbOut"></div>
+    <details id="layerDet" style="margin-top:10px"><summary class="note" style="cursor:pointer">종목별 층 바꾸기 (자동: 커버드콜·월배당 → 인컴, 그 외 → 코어, 예수금 → 완충)</summary><div class="tw" id="layerTable"></div></details>
+  </div>
+  <div class="card">
     <h2>월 현금흐름 목표 추적</h2>
     <div class="kpis" id="cfKpi"></div>
     <div class="tw" id="cfOut" style="margin-top:10px"></div>
@@ -349,6 +357,13 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
       <div><label>일반 계좌 분배금 원천징수세율(%)</label><input type="number" id="sDivTax" step="any"></div>
       <div><label>커버드콜 ETF 비중 상한(%) — 대시보드 점검용</label><input type="number" id="sCcLimit" step="any"></div>
     </div>
+    <h3>리밸런싱 목표 비중 (코어·인컴·완충)</h3>
+    <div class="grid">
+      <div><label>코어 목표 비중(%)</label><input type="number" id="sRbCore" step="any"></div>
+      <div><label>인컴 목표 비중(%)</label><input type="number" id="sRbIncome" step="any"></div>
+      <div><label>완충(예수금·단기자산) 목표 비중(%)</label><input type="number" id="sRbBuffer" step="any"></div>
+      <div><label>허용 편차(±%p) — 넘으면 조정 대상</label><input type="number" id="sRbBand" step="any"></div>
+    </div>
     <h3>금융소득종합과세·건강보험료 점검 기준 (대시보드 점검용 — 매년 바뀌므로 직접 확인)</h3>
     <div class="grid">
       <div><label>금융소득종합과세 기준(원, 이자+배당 합계 초과 시)</label><input type="number" id="sFiLimit" step="any"></div>
@@ -398,7 +413,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -546,6 +561,26 @@ function fiData(c){
 function fiVerdict(r){
   const s=db.settings;
   return r.lvl==='tax'?`🔴 종합과세 대상 (기준 초과 ${fmt(r.over)}원)`:r.lvl==='hi'?`🟠 건보료 반영 구간 (종합과세 기준까지 ${fmt(s.fiLimit-r.I)}원 여유)`:r.lvl==='ok'?`🟢 기준 이내 (건보료 반영 기준까지 ${fmt(Math.max(0,s.hiLimit-r.I))}원 여유)`:'-';
+}
+// 리밸런싱: 보유 종목을 코어·인컴 층으로, 예수금을 완충 층으로 묶어 목표 비중과 비교
+const LAYERS=['코어','인컴','완충'];
+function autoLayer(p){return autoCat(p)==='커버드콜 ETF'||/월/.test((db.meta[p.name]||{}).cycle||'')?'인컴':'코어'}
+function layerOf(p){
+  const m=db.meta[p.name]||{};
+  return LAYERS.includes(m.layer)?m.layer:autoLayer(p);
+}
+function rbData(d){
+  const s=db.settings,w=[s.rbCore,s.rbIncome,s.rbBuffer].map(x=>x>0?x:0),ws=w.reduce((a,b)=>a+b,0);
+  const val={'코어':0,'인컴':0,'완충':d.tcash};
+  d.held.forEach(p=>{val[layerOf(p)]+=posVal(p)});
+  const total=LAYERS.reduce((a,k)=>a+val[k],0),X=s.rbNew>0?s.rbNew:0,T=total+X;
+  const rows=LAYERS.map((k,i)=>{
+    const tw=ws>0?w[i]/ws*100:0,cur=val[k],cw=total>0?cur/total*100:0,tgt=total*tw/100;
+    return {k,cur,cw,tw,diff:cw-tw,tgt,delta:tgt-cur,out:total>0&&Math.abs(cw-tw)>s.rbBand+1e-9,need:Math.max(0,T*tw/100-cur)};
+  });
+  const sn=rows.reduce((a,r)=>a+r.need,0);
+  rows.forEach(r=>{r.add=X>0&&sn>0?r.need*X/sn:0});
+  return {rows,total,X,ws,out:rows.filter(r=>r.out)};
 }
 // 월 현금흐름 목표 추적: 예상(보유×배당률, 세금·건보료 반영)과 올해 월별 실제 수령(세후)
 function cfData(c,fi){
@@ -1244,7 +1279,7 @@ function catOf(p){
 }
 const posVal=p=>{const px=db.prices[p.name];return px>0?px*p.qty:p.cost};
 function dashData(c){
-  const d=dashData0(c);d.cf=cfData(c,d.fi);return d;
+  const d=dashData0(c);d.cf=cfData(c,d.fi);d.rb=rbData(d);return d;
 }
 function dashData0(c){
   const sums=acctSummary(c);let tc=0,tv=0,tcash=0;sums.forEach(s=>{tc+=s.cost;tv+=s.val;tcash+=s.cash});
@@ -1276,6 +1311,7 @@ function dashComments(d){
     L.push(`현금성 자산 비중 ${(d.tcash/d.total*100).toFixed(1)}%`);
   }
   if(d.inc.monthly>0)L.push(`예상 월 분배금 ${fmt(d.inc.monthly)}원 / 올해 받은 분배금(세전) ${fmt(d.divYear)}원`);
+  if(d.rb.out.length)L.push('리밸런싱 점검: '+d.rb.out.map(r=>`${r.k} ${r.cw.toFixed(1)}%(목표 ${r.tw.toFixed(0)}%, ${r.diff>0?'+':''}${r.diff.toFixed(1)}%p)`).join(', ')+` — 허용 편차 ±${db.settings.rbBand}%p 초과`);
   if(d.cf.goal>0&&(d.cf.annual>0||d.cf.ytd>0))L.push(`월 현금흐름(세후 추정) ${fmt(d.cf.monthly)}원 / 목표 ${fmt(d.cf.goal)}원 (${(d.cf.monthly/d.cf.goal*100).toFixed(0)}%)`+(d.cf.need>0?` · 목표까지 약 ${fmt(d.cf.need)}원 추가 필요(현재 세후 배당률 ${d.cf.netYield.toFixed(2)}% 기준)`:''));
   if(d.fi.est.I>0)L.push(`금융소득(일반계좌 분배금 등, 연 환산) ${fmt(d.fi.est.I)}원 — ${fiVerdict(d.fi.est)}`+(d.fi.est.prem>0?` · 건보료 증분 추정 월 ${fmt(d.fi.est.prem/12)}원`:''));
   const ng=negCash();if(ng.length)L.push('⚠ 예수금 마이너스: '+ng.join(', ')+' — 입금·초기 예수금 확인');
@@ -1295,7 +1331,7 @@ function dashText(d){
   if(db.memo.trim())L.push('','[메모]',db.memo.trim());
   return L.join('\n');
 }
-let catOpen=false;
+let catOpen=false,layerOpen=false;
 function renderDash(c){
   const d=dashData(c);
   $('dashDate').textContent=`기준일 ${todayStr()} · 현재가 입력 ${d.held.length-d.missing}/${d.held.length}종목`+(db.pricesAt?` · 마지막 일괄 갱신 ${db.pricesAt}`:'');
@@ -1317,6 +1353,14 @@ function renderDash(c){
   const t=(a,title)=>a.length?`<table><tr><th>${title}</th><th>평가손익</th><th>수익률</th></tr>${a.slice(0,5).map(x=>`<tr><td class="l">${esc(x.p.name)}</td><td class="${cls(x.pl)}">${fmtS(x.pl)}</td><td class="${cls(x.pl)}">${pct(x.rate)}</td></tr>`).join('')}</table>`:`<p class="note">${title}: 해당 종목이 없습니다.</p>`;
   $('dashUp').innerHTML=t(d.ups,'수익 기여 상위');
   $('dashDn').innerHTML=t(d.downs,'손실 부담 상위');
+  const rb=d.rb;
+  $('rbOut').innerHTML=rb.total>0?`<table><tr><th>층</th><th>현재 금액</th><th>현재 비중</th><th>목표 비중</th><th>차이(%p)</th><th>목표 금액</th><th>전체 재조정 시 매수(+)/매도(−)</th>${rb.X>0?'<th>신규 '+fmt(rb.X)+'원 배분</th>':''}<th class="l">판정</th></tr>${rb.rows.map(r=>`<tr><td class="l"><b>${r.k}</b></td><td>${fmt(r.cur)}</td><td>${r.cw.toFixed(1)}%</td><td>${r.tw.toFixed(1)}%</td><td class="${r.out?(r.diff>0?'up':'dn'):''}">${r.diff>0?'+':''}${r.diff.toFixed(1)}</td><td>${fmt(r.tgt)}</td><td class="${cls(r.delta)}">${fmtS(r.delta)}</td>${rb.X>0?'<td><b>'+(r.add>0?fmt(r.add):'-')+'</b></td>':''}<td class="l">${r.out?(r.diff>0?'🔴 비중 초과':'🟠 비중 부족'):'🟢 허용 범위'}</td></tr>`).join('')}</table>
+  <p class="note">· 기준: 평가금액(현재가 없으면 매입금액) + 예수금 합계 ${fmt(rb.total)}원. 목표 비중 합계가 100이 아니면 ${rb.ws>0?'비율대로 환산':'계산할 수 없음'}합니다${Math.abs(rb.ws-100)>1e-9?` (현재 합계 ${rb.ws}%)`:''}.<br>
+  · <b>신규 자금 배분</b>은 매도 없이, 넣은 뒤 목표 비중에 가장 가까워지도록 부족한 층에 나눈 금액입니다. 일반(과세) 계좌에서 매도하면 매매차익 과세와 금융소득 합산·건보료 영향이 생기니, 가능하면 신규 자금·분배금 재투자로 맞추고 ISA·연금 계좌 안에서 조정하는 편이 유리합니다.<br>
+  · 커버드콜 ETF 비중 ${d.total>0?(d.cats['커버드콜 ETF'].val/d.total*100).toFixed(1):0}% (상한 ${db.settings.ccLimit}%)는 위 층과 별개로 계속 점검하세요. 층 구분과 목표 비중은 참고용 기준입니다.</p>`:'<p class="note">보유 종목이나 예수금을 입력하면 층별 비중이 표시됩니다.</p>';
+  $('layerTable').innerHTML=d.held.length?`<table><tr><th>계좌</th><th>종목</th><th>평가금액</th><th>층</th></tr>${d.held.map(p=>{const cur=(db.meta[p.name]||{}).layer;
+    return `<tr><td class="l">${esc(acctLabel(p.acct))}</td><td class="l">${esc(p.name)}</td><td>${fmt(posVal(p))}</td><td class="l"><select class="hin" data-id="layer|${esc(p.name)}" style="width:auto"><option value="">자동 (${autoLayer(p)})</option>${LAYERS.map(k=>`<option value="${k}"${cur===k?' selected':''}>${k}</option>`).join('')}</select></td></tr>`}).join('')}</table>`:'';
+  const det0=$('layerDet');if(det0)det0.open=layerOpen;
   const cf=d.cf;
   $('cfKpi').innerHTML=[['예상 월 현금흐름(세후)',fmt(cf.monthly)+'원',''],['목표 월 현금흐름',cf.goal>0?fmt(cf.goal)+'원':'미설정',''],['목표 달성률',cf.goal>0?(cf.monthly/cf.goal*100).toFixed(0)+'%':'-',''],['부족분(월)',cf.goal>0?fmt(cf.gap)+'원':'-',cf.gap>0?'up':''],['올해 월평균 수령(세후)',fmt(cf.avg)+'원','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
   const cbar=v=>`<div style="background:var(--line);border-radius:4px;height:8px;width:120px"><div style="width:${Math.min(100,v)}%;background:var(--pri);height:8px;border-radius:4px"></div></div>`;
@@ -1484,7 +1528,7 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('sRbCore').value=db.settings.rbCore;$('sRbIncome').value=db.settings.rbIncome;$('sRbBuffer').value=db.settings.rbBuffer;$('sRbBand').value=db.settings.rbBand;$('rbNew').value=db.settings.rbNew||'';$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
@@ -1521,7 +1565,7 @@ $('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){if($('pricePaste').va
 $('btnInit').onclick=applyInit;
 $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n){chkManual[n]=e.target.value;renderRuleCheck(autoChecks())}});
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
-document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open},true);
+document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
 $('btnDashCopy').onclick=async()=>{try{await navigator.clipboard.writeText(dashText(dashData(compute())));flash('대시보드 요약을 복사했습니다')}catch(e){flash('복사 실패: 브라우저가 클립보드를 막았습니다','warn')}};
 $('btnXAdd').onclick=addFlow;
@@ -1582,7 +1626,7 @@ document.body.addEventListener('change',e=>{
   else if(kind==='px'){if(n>0)db.prices[key]=n;else delete db.prices[key]}
   else{
     const m=db.meta[key]||(db.meta[key]={});
-    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'||kind==='guide'){if(v)m[kind]=v;else delete m[kind]}
+    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'||kind==='guide'||kind==='layer'){if(v)m[kind]=v;else delete m[kind]}
     else{if(n>0)m[kind]=n;else delete m[kind]}
   }
   save();
@@ -1597,9 +1641,9 @@ $('btnSaveSet').onclick=()=>{
   db.settings.fee=parseFloat($('sFee').value)||0;db.settings.taxStock=parseFloat($('sTaxStock').value)||0;
   db.settings.taxEtf=parseFloat($('sTaxEtf').value)||0;db.settings.auto=$('sAuto').checked;
   db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;db.settings.ccLimit=parseFloat($('sCcLimit').value)||0;
-  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;db.settings.fiLimit=parseFloat($('sFiLimit').value)||0;db.settings.hiLimit=parseFloat($('sHiLimit').value)||0;db.settings.hiRate=parseFloat($('sHiRate').value)||0;db.settings.ltcRate=parseFloat($('sLtcRate').value)||0;db.settings.margTax=parseFloat($('sMargTax').value)||0;db.settings.goalMonthly=parseFloat($('sGoalMonthly').value)||0;db.settings.otherMonthly=parseFloat($('sOtherMonthly').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
+  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;db.settings.fiLimit=parseFloat($('sFiLimit').value)||0;db.settings.hiLimit=parseFloat($('sHiLimit').value)||0;db.settings.hiRate=parseFloat($('sHiRate').value)||0;db.settings.ltcRate=parseFloat($('sLtcRate').value)||0;db.settings.margTax=parseFloat($('sMargTax').value)||0;db.settings.goalMonthly=parseFloat($('sGoalMonthly').value)||0;db.settings.otherMonthly=parseFloat($('sOtherMonthly').value)||0;db.settings.rbCore=parseFloat($('sRbCore').value)||0;db.settings.rbIncome=parseFloat($('sRbIncome').value)||0;db.settings.rbBuffer=parseFloat($('sRbBuffer').value)||0;db.settings.rbBand=parseFloat($('sRbBand').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
 };
-['fiOther','fiAsset','fiYield'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
+['fiOther','fiAsset','fiYield','rbNew'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
 $('btnWipe').onclick=()=>{
   if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
