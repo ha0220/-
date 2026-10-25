@@ -79,6 +79,7 @@ h3{font-size:14px;margin:14px 0 6px}
   <button data-t="hist">매매일지</button>
   <button data-t="pnl">기간 손익</button>
   <button data-t="rules">투자원칙</button>
+  <button data-t="plan">은퇴 설계</button>
   <button data-t="set">설정</button>
 </div>
 
@@ -354,6 +355,30 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
   </div>
 </section>
 
+<section id="t-plan" class="hide">
+  <div class="card">
+    <h2>🏖️ 은퇴 · 상가 매각 시뮬레이터</h2>
+    <p class="note" style="margin:0 0 10px">상가 매각 자금을 금융자산으로 옮겼을 때, 연도별 <b>세후 월 현금흐름</b>(분배금 − 종합과세·건보료 추정 + 국민연금 + 매각 전 임대소득)이 목표에 닿는지 봅니다. 모든 금액은 <b>오늘 가치(물가 미반영)</b>이고, 분배금은 모두 생활비로 쓴다고 가정합니다. 아래 값은 예시 기본값이니 본인 상황에 맞게 바꾸세요.</p>
+    <div class="grid">
+      <div><label>현재 나이</label><input type="number" id="rtAge" step="any"></div>
+      <div><label>상가 매각까지 (년 뒤)</label><input type="number" id="rtSaleYears" step="any"></div>
+      <div><label>매각 후 투자할 현금(원, 세금·대출 상환 후)</label><input type="number" id="rtSaleNet" step="any"></div>
+      <div><label>현재 금융자산(원) — 비우면 장부 평가액</label><input type="number" id="rtAssets" step="any"></div>
+      <div><label>매각 전 월 임대 순소득(원, 세후)</label><input type="number" id="rtRent" step="any"></div>
+      <div><label>포트폴리오 분배율(연 %)</label><input type="number" id="rtYield" step="any"></div>
+      <div><label>자산 가격 변동률(연 %, 물가 차감 후)</label><input type="number" id="rtGrowth" step="any"></div>
+      <div><label>ISA 등 절세계좌에 둘 자산(원)</label><input type="number" id="rtSheltered" step="any"></div>
+      <div><label>국민연금 시작 나이</label><input type="number" id="rtPenAge" step="any"></div>
+      <div><label>국민연금 월 수령액(원)</label><input type="number" id="rtPen" step="any"></div>
+      <div><label>연금의 건보료 반영 비율(%)</label><input type="number" id="rtPenRatio" step="any"></div>
+      <div><label>시뮬레이션 기간(년)</label><input type="number" id="rtYears" step="any"></div>
+    </div>
+    <div class="note" id="rtLedger" style="margin-top:6px"></div>
+  </div>
+  <div class="card"><div class="kpis" id="rtKpi"></div></div>
+  <div class="card"><h2>연도별 세후 월 현금흐름</h2><div class="tw" id="rtTable"></div><div id="rtNotes" style="margin-top:8px"></div></div>
+</section>
+
 <section id="t-set" class="hide">
   <div class="card">
     <h2>수수료·세율 (매매 시 자동 계산에 사용)</h2>
@@ -433,7 +458,8 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -601,6 +627,53 @@ function rbData(d){
   const sn=rows.reduce((a,r)=>a+r.need,0);
   rows.forEach(r=>{r.add=X>0&&sn>0?r.need*X/sn:0});
   return {rows,total,X,ws,out:rows.filter(r=>r.out)};
+}
+// 은퇴·상가 매각 시뮬레이터: 연도별 자산·분배금·세금·건보료·연금으로 세후 월 현금흐름 계산
+function rtYear(F,pen,rent,P){
+  const s=db.settings,S=Math.min(F,P.sheltered),T=F-S,y=P.yield/100;
+  const iT=T*y,iS=S*y,wh=iT*s.divTax/100;
+  const over=s.fiLimit>0?Math.max(0,iT-s.fiLimit):0,extra=over*Math.max(0,s.margTax-s.divTax)/100;
+  const isaT=Math.max(0,iS-s.isaLimit)*s.isaTax/100;
+  const base=(s.hiLimit>0&&iT>s.hiLimit?iT:0)+pen*P.penRatio/100,prem=base*s.hiRate/100*(1+s.ltcRate/100);
+  const net=rent+iT+iS+pen-wh-extra-isaT-prem;
+  return {F,iT,iS,rent,pen,tax:wh+extra+isaT,prem,net,monthly:net/12};
+}
+// 목표 월 현금흐름에 처음 닿는 금융자산(1천만원 단위로 탐색). 건보료 기준을 넘는 순간 순소득이 줄 수 있어 이분탐색 대신 순차 탐색
+function rtNeed(pen,P,goal){
+  for(let F=0;F<=1e11;F+=1e7)if(rtYear(F,pen,0,P).monthly>=goal)return F;
+  return null;
+}
+function rtData(c){
+  const s=db.settings;let ledger=0;acctSummary(c).forEach(a=>{ledger+=a.val+a.cash});
+  const P={age:s.rtAge,saleYears:Math.max(0,Math.round(s.rtSaleYears)),saleNet:s.rtSaleNet,rent:s.rtRent,yield:s.rtYield,g:s.rtGrowth/100,sheltered:s.rtSheltered,
+    penAge:s.rtPenAge,pen:s.rtPen*12,penRatio:s.rtPenRatio,F0:s.rtAssets>0?s.rtAssets:ledger,ledger};
+  const goal=s.goalMonthly>0?s.goalMonthly:0,yr=+todayStr().slice(0,4),rows=[];
+  for(let k=0;k<=Math.max(1,Math.round(s.rtYears));k++){
+    const age=P.age+k,F=P.F0*Math.pow(1+P.g,k)+(k>=P.saleYears?P.saleNet*Math.pow(1+P.g,k-P.saleYears):0);
+    const pen=age>=P.penAge?P.pen:0,rent=k<P.saleYears?P.rent*12:0;
+    rows.push({k,year:yr+k,age,sold:k>=P.saleYears,hasPen:pen>0,...rtYear(F,pen,rent,P)});
+  }
+  const first=rows.find(r=>r.sold),firstPen=rows.find(r=>r.sold&&r.hasPen);
+  return {P,goal,rows,first,firstPen,needNoPen:goal>0?rtNeed(0,P,goal):null,needPen:goal>0?rtNeed(P.pen,P,goal):null};
+}
+function renderPlan(c){
+  const d=rtData(c),P=d.P,g=d.goal;
+  $('rtLedger').textContent=`장부 기준 현재 금융자산(평가액+예수금) ${fmt(P.ledger)}원 · 목표 월 현금흐름 ${g>0?fmt(g)+'원(설정 탭에서 변경)':'미설정(설정 탭)'} · 분배율은 보유 종목의 평균이 아니라 위에 입력한 값을 씁니다`;
+  const pc=v=>g>0?(v/g*100).toFixed(0)+'%':'-';
+  const k=[];
+  if(d.first)k.push(['매각 직후 월 현금흐름(세후)',fmt(d.first.monthly)+'원',g>0&&d.first.monthly<g?'up':'']);
+  if(d.firstPen)k.push([`국민연금 시작(${d.firstPen.age}세) 후 월 현금흐름`,fmt(d.firstPen.monthly)+'원',g>0&&d.firstPen.monthly<g?'up':'']);
+  k.push(['목표 월 현금흐름',g>0?fmt(g)+'원':'미설정','']);
+  if(g>0){
+    k.push(['목표 달성에 필요한 금융자산(연금 전)',d.needNoPen===null?'도달 불가':fmt(d.needNoPen)+'원','']);
+    k.push(['목표 달성에 필요한 금융자산(연금 후)',d.needPen===null?'도달 불가':fmt(d.needPen)+'원','']);
+  }
+  $('rtKpi').innerHTML=k.map(([a,b,c2])=>`<div class="kpi"><span>${a}</span><b class="${c2}">${b}</b></div>`).join('');
+  $('rtTable').innerHTML=`<table><tr><th>연도</th><th>나이</th><th class="l">구분</th><th>금융자산(연초)</th><th>분배금(세전)</th><th>세금·건보료</th><th>임대(세후)</th><th>국민연금</th><th>세후 월 현금흐름</th><th>목표 대비</th></tr>${d.rows.map(r=>`<tr${r.k===P.saleYears?' style="background:color-mix(in srgb,var(--pri) 8%,transparent)"':''}><td class="l">${r.year}</td><td>${r.age}</td><td class="l">${r.sold?'매각 후':'매각 전'}${r.hasPen?' · 국민연금':''}</td><td>${fmt(r.F)}</td><td>${fmt(r.iT+r.iS)}</td><td>${fmt(r.tax+r.prem)}</td><td>${r.rent?fmt(r.rent):'-'}</td><td>${r.pen?fmt(r.pen):'-'}</td><td><b>${fmt(r.monthly)}</b></td><td class="${g>0&&r.monthly<g?'up':''}">${pc(r.monthly)}</td></tr>`).join('')}</table>`;
+  $('rtNotes').innerHTML=`<p class="note">· <b>가정</b>: 분배금은 전부 생활비로 쓰고(재투자 없음), 자산은 가격 변동률만큼만 변하며, 매각 현금은 매각 연도 초에 한꺼번에 투자합니다. 절세계좌(ISA 등) 자산은 입력한 금액까지만 두고 나머지는 일반 과세 계좌로 계산합니다.<br>
+  · <b>세금·건보료</b>: 일반계좌 분배금은 원천징수, 금융소득 합계가 종합과세 기준을 넘으면 초과분에 한계세율을 적용한 추가 소득세(설정값)를, 합계가 건보료 기준(기본 1,000만원)을 넘으면 전액에 건강보험료+장기요양을 추정합니다. 국민연금은 입력한 비율만큼 건보료 소득으로 넣습니다(비율은 직접 확인하세요). ISA 등은 비과세 한도 초과분에 분리과세율을 적용합니다.<br>
+  · <b>빠진 것</b>: 건보료의 재산·임대·기타 소득 부과분, 매각 전 건보료의 임대 반영, 상가 양도세·대출 상환(→ "매각 후 투자할 현금"에 반영해서 입력), 국민연금·퇴직연금의 소득세, 의료비·상속 등 예외 지출, 분배율 변동(특히 커버드콜), 물가 상승. 숫자는 대략적인 방향을 보기 위한 추정이며, 실제 결정 전에 세무사·공단 안내로 확인하세요.<br>
+  · "필요한 금융자산"은 연금·임대 없이(연금 전) 또는 국민연금만 있을 때(연금 후) 분배금만으로 목표에 처음 닿는 자산(1천만원 단위)입니다. 건보료 기준을 넘는 순간 세후 소득이 줄어드는 구간이 있어 단순 비례가 아닙니다.</p>`;
 }
 // 배당 캘린더: 종목별 지급월(직접 입력 > 배당 주기로 추정)에 예상 분배금을 나누고 실제 기록과 비교
 function payMonthsOf(name){
@@ -1616,6 +1689,7 @@ function render(){
   renderFlow();
   renderAlerts(c);
   renderReview(c);
+  renderPlan(c);
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -1686,11 +1760,11 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('sRbCore').value=db.settings.rbCore;$('sRbIncome').value=db.settings.rbIncome;$('sRbBuffer').value=db.settings.rbBuffer;$('sRbBand').value=db.settings.rbBand;$('rbNew').value=db.settings.rbNew||'';$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('sOtherMonthly').value=db.settings.otherMonthly||'';$('sRbCore').value=db.settings.rbCore;$('sRbIncome').value=db.settings.rbIncome;$('sRbBuffer').value=db.settings.rbBuffer;$('sRbBand').value=db.settings.rbBand;$('rbNew').value=db.settings.rbNew||'';RT_IDS.forEach(id=>{$(id).value=db.settings[id]||''});$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  ['today','dash','hold','div','flow','hist','pnl','rules','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
+  ['today','dash','hold','div','flow','hist','pnl','rules','plan','set'].forEach(k=>$('t-'+k).classList.toggle('hide',k!==t));
 }
 $('tabs').addEventListener('click',e=>{if(e.target.dataset.t)tab(e.target.dataset.t)});
 $('btnAdd').onclick=addTrade;
@@ -1804,6 +1878,7 @@ $('btnSaveSet').onclick=()=>{
   db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;db.settings.ccLimit=parseFloat($('sCcLimit').value)||0;
   db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;db.settings.fiLimit=parseFloat($('sFiLimit').value)||0;db.settings.hiLimit=parseFloat($('sHiLimit').value)||0;db.settings.hiRate=parseFloat($('sHiRate').value)||0;db.settings.ltcRate=parseFloat($('sLtcRate').value)||0;db.settings.margTax=parseFloat($('sMargTax').value)||0;db.settings.goalMonthly=parseFloat($('sGoalMonthly').value)||0;db.settings.otherMonthly=parseFloat($('sOtherMonthly').value)||0;db.settings.rbCore=parseFloat($('sRbCore').value)||0;db.settings.rbIncome=parseFloat($('sRbIncome').value)||0;db.settings.rbBuffer=parseFloat($('sRbBuffer').value)||0;db.settings.rbBand=parseFloat($('sRbBand').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
 };
+RT_IDS.forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 ['fiOther','fiAsset','fiYield','rbNew'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
 $('btnWipe').onclick=()=>{
