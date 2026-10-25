@@ -163,6 +163,15 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     </div>
   </div>
   <div class="card">
+    <h2>금융소득종합과세 · 건강보험료 점검</h2>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label>올해 기타 금융소득 (이자·해외ETF 매매차익 등, 원)</label><input type="number" id="fiOther" step="any"></div>
+      <div><label>가정: 일반계좌 금융자산 (원) — 매각 후 계획용</label><input type="number" id="fiAsset" step="any"></div>
+      <div><label>가정: 연 분배율 (%)</label><input type="number" id="fiYield" step="any"></div>
+    </div>
+    <div class="tw" id="fiOut"></div>
+  </div>
+  <div class="card">
     <h2>핵심 코멘트 · 운용 전략 메모</h2>
     <pre id="dashAuto"></pre>
     <label>내 메모 (자동 저장)</label>
@@ -335,6 +344,15 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
       <div><label>일반 계좌 분배금 원천징수세율(%)</label><input type="number" id="sDivTax" step="any"></div>
       <div><label>커버드콜 ETF 비중 상한(%) — 대시보드 점검용</label><input type="number" id="sCcLimit" step="any"></div>
     </div>
+    <h3>금융소득종합과세·건강보험료 점검 기준 (대시보드 점검용 — 매년 바뀌므로 직접 확인)</h3>
+    <div class="grid">
+      <div><label>금융소득종합과세 기준(원, 이자+배당 합계 초과 시)</label><input type="number" id="sFiLimit" step="any"></div>
+      <div><label>건보료 소득 반영 기준(원, 합계 초과 시 전액 반영)</label><input type="number" id="sHiLimit" step="any"></div>
+      <div><label>건강보험료율(%)</label><input type="number" id="sHiRate" step="any"></div>
+      <div><label>장기요양보험료율(건보료 대비 %)</label><input type="number" id="sLtcRate" step="any"></div>
+      <div><label>내 종합소득세 한계세율(지방세 포함 %)</label><input type="number" id="sMargTax" step="any"></div>
+      <div><label>목표 세후 월 현금흐름(원)</label><input type="number" id="sGoalMonthly" step="any"></div>
+    </div>
     <p class="note">* 세율은 임시 기본값입니다. 증권사 체결내역의 실제 수수료·세금과 다르면 여기서 고치거나 거래 입력 시 직접 적으세요. 엑셀 매매일지는 비용을 빼지 않고 손익을 계산하므로, 이 장부의 실현손익은 엑셀보다 수수료·세금만큼 적게 나옵니다.</p>
     <div class="bar" style="margin:0"><button class="pri" id="btnSaveSet">설정 저장</button></div>
   </div>
@@ -374,7 +392,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,fiOther:0,fiAsset:0,fiYield:0}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -500,6 +518,28 @@ function incomeTotals(rows){
   const val=rows.reduce((s,r)=>s+r.val,0),yearly=rows.reduce((s,r)=>s+r.yearly,0);
   const isaYear=rows.filter(r=>isIsa(r.p.acct)).reduce((s,r)=>s+r.yearly,0);
   return {val,yearly,monthly:yearly/12,rate:val>0?yearly/val*100:0,isaYear};
+}
+// 금융소득종합과세·건보료 점검 (일반 과세 계좌의 분배금 + 직접 입력한 기타 금융소득. ISA·연금 계좌는 제외)
+const isTaxable=a=>!isIsa(a)&&!/연금|IRP|퇴직/i.test(a||'');
+function fiCalc(I){
+  const s=db.settings,wh=I*s.divTax/100;
+  const over=s.fiLimit>0?Math.max(0,I-s.fiLimit):0;
+  const extra=over*Math.max(0,s.margTax-s.divTax)/100;
+  const hiBase=s.hiLimit>0&&I>s.hiLimit?I:0;
+  const prem=hiBase*s.hiRate/100*(1+s.ltcRate/100);
+  const lvl=I<=0?'':over>0?'tax':hiBase>0?'hi':'ok';
+  return {I,wh,over,extra,hiBase,prem,lvl,net:I-wh-extra-prem};
+}
+function fiData(c){
+  const s=db.settings,yr=todayStr().slice(0,4),oth=s.fiOther>0?s.fiOther:0;
+  const real=sumBy(db.divs.filter(x=>x.date.startsWith(yr)&&isTaxable(x.acct)),x=>x.gross)+oth;
+  const est=incomeRows(c).filter(r=>isTaxable(r.p.acct)).reduce((a,r)=>a+r.yearly,0)+oth;
+  const sim=s.fiAsset>0&&s.fiYield>0?s.fiAsset*s.fiYield/100+oth:0;
+  return {real:fiCalc(real),est:fiCalc(est),sim:sim>0?fiCalc(sim):null};
+}
+function fiVerdict(r){
+  const s=db.settings;
+  return r.lvl==='tax'?`🔴 종합과세 대상 (기준 초과 ${fmt(r.over)}원)`:r.lvl==='hi'?`🟠 건보료 반영 구간 (종합과세 기준까지 ${fmt(s.fiLimit-r.I)}원 여유)`:r.lvl==='ok'?`🟢 기준 이내 (건보료 반영 기준까지 ${fmt(Math.max(0,s.hiLimit-r.I))}원 여유)`:'-';
 }
 // 계좌별 합계
 function acctSummary(c){
@@ -1196,7 +1236,7 @@ function dashData(c){
     realYear:c.sorted.filter(t=>t.side==='sell'&&t.date.startsWith(yr)).reduce((s,t)=>s+(c.rows[t.id]?.realized||0),0),
     realAll:Object.values(c.pos).reduce((s,p)=>s+p.realized,0),
     divYear:sumBy(db.divs.filter(d=>d.date.startsWith(yr)),d=>d.gross),
-    inc:incomeTotals(incomeRows(c).filter(r=>r.y>0))};
+    inc:incomeTotals(incomeRows(c).filter(r=>r.y>0)),fi:fiData(c)};
 }
 function dashComments(d){
   const L=[],f=x=>`${x.p.name}(${pct(x.rate)}, ${fmtS(x.pl)}원)`,names=a=>a.slice(0,5).map(p=>p.name).join(', ')+(a.length>5?` 외 ${a.length-5}개`:'');
@@ -1211,6 +1251,7 @@ function dashComments(d){
     L.push(`현금성 자산 비중 ${(d.tcash/d.total*100).toFixed(1)}%`);
   }
   if(d.inc.monthly>0)L.push(`예상 월 분배금 ${fmt(d.inc.monthly)}원 / 올해 받은 분배금(세전) ${fmt(d.divYear)}원`);
+  if(d.fi.est.I>0)L.push(`금융소득(일반계좌 분배금 등, 연 환산) ${fmt(d.fi.est.I)}원 — ${fiVerdict(d.fi.est)}`+(d.fi.est.prem>0?` · 건보료 증분 추정 월 ${fmt(d.fi.est.prem/12)}원`:''));
   const ng=negCash();if(ng.length)L.push('⚠ 예수금 마이너스: '+ng.join(', ')+' — 입금·초기 예수금 확인');
   const rg=regime();if(rg.n)L.push(`매크로 레짐(1단계 점검): ${regimeText(rg)}`);
   if(d.missing>0)L.push(`현재가 미입력 ${d.missing}종목 — 평가손익은 입력된 종목 기준으로 보세요`);
@@ -1250,6 +1291,24 @@ function renderDash(c){
   const t=(a,title)=>a.length?`<table><tr><th>${title}</th><th>평가손익</th><th>수익률</th></tr>${a.slice(0,5).map(x=>`<tr><td class="l">${esc(x.p.name)}</td><td class="${cls(x.pl)}">${fmtS(x.pl)}</td><td class="${cls(x.pl)}">${pct(x.rate)}</td></tr>`).join('')}</table>`:`<p class="note">${title}: 해당 종목이 없습니다.</p>`;
   $('dashUp').innerHTML=t(d.ups,'수익 기여 상위');
   $('dashDn').innerHTML=t(d.downs,'손실 부담 상위');
+  const f=d.fi,cols=[['올해 실제 수령',f.real],['연 환산 예상(보유·배당률)',f.est]].concat(f.sim?[['가정(자산×분배율)',f.sim]]:[]);
+  const row=(h,fn,b)=>`<tr><td class="l">${h}</td>${cols.map(([,r])=>`<td${b?' class="l wrap"':''}>${fn(r)}</td>`).join('')}</tr>`;
+  $('fiOut').innerHTML=`<table><tr><th class="l">항목 (일반계좌 기준)</th>${cols.map(([h])=>`<th>${h}</th>`).join('')}</tr>
+    ${row('금융소득 합계(세전)',r=>'<b>'+fmt(r.I)+'</b>')}
+    ${row('종합과세 기준 대비',r=>db.settings.fiLimit>0?(r.I/db.settings.fiLimit*100).toFixed(0)+'%':'-')}
+    ${row('판정',fiVerdict,true)}
+    ${row('종합과세 초과분',r=>r.over>0?fmt(r.over):'-')}
+    ${row('추가 소득세 추정(초과분×(한계세율−원천징수율))',r=>r.extra>0?fmt(r.extra):'-')}
+    ${row('건보료 소득반영 금액',r=>r.hiBase>0?fmt(r.hiBase):'-')}
+    ${row('건보료+장기요양 증분 추정(연)',r=>r.prem>0?fmt(r.prem):'-')}
+    ${row('세후 연 현금흐름 추정',r=>fmt(r.net))}
+    ${row('세후 월 현금흐름 추정',r=>'<b>'+fmt(r.net/12)+'</b>')}
+    ${db.settings.goalMonthly>0?row('목표 월 '+fmt(db.settings.goalMonthly)+'원 대비',r=>r.I>0?(r.net/12/db.settings.goalMonthly*100).toFixed(0)+'%':'-'):''}
+  </table>
+  <p class="note">· 합계에는 <b>일반(과세) 계좌의 분배금</b>과 위 "기타 금융소득"만 들어갑니다. ISA·연금·퇴직연금 계좌는 제외합니다(ISA는 만기 인출 시 분리과세 등 별도 확인).<br>
+  · 건보료 반영은 금융소득 합계가 <b>기준(기본 ${fmt(db.settings.hiLimit)}원)을 넘으면 전액</b> 소득에 들어가는 구조라, 기준 바로 위가 가장 불리합니다(기준 직후 증분 약 ${fmt(db.settings.hiLimit*db.settings.hiRate/100*(1+db.settings.ltcRate/100))}원/년). 기준 이하로 관리하면 0원입니다.<br>
+  · 국내상장 해외 ETF의 <b>매매차익</b>은 배당소득이라 합산 대상입니다. 이 계산은 분배금만 자동으로 넣으므로, 실현한 차익은 "기타 금융소득"에 직접 더하세요.<br>
+  · <b>대략의 추정치</b>입니다: 종합과세는 이 소득 외의 근로·사업·임대소득과 합산되어 실제 세율이 달라지고(한계세율은 설정값), 비교과세·Gross-up·건보료의 재산·임대소득 부과분은 반영하지 않습니다. 기준값·보험료율은 매년 바뀌니 설정 탭에서 공단·국세청 고시로 확인해 고치세요.</p>`;
   const cm=dashComments(d);
   $('dashAuto').textContent=cm.length?cm.map(x=>'· '+x).join('\n'):'보유 종목과 현재가를 입력하면 자동 요약이 표시됩니다.';
 }
@@ -1392,7 +1451,7 @@ function restore(file){
 
 // ---------- 설정/탭/이벤트 ----------
 function applySettings(){
-  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('dashMemo').value=db.memo||'';
+  $('sFee').value=db.settings.fee;$('sTaxStock').value=db.settings.taxStock;$('sTaxEtf').value=db.settings.taxEtf;$('sAuto').checked=!!db.settings.auto;$('sIsaLimit').value=db.settings.isaLimit;$('sIsaTax').value=db.settings.isaTax;$('sDivTax').value=db.settings.divTax;$('sCcLimit').value=db.settings.ccLimit;$('sRiskPct').value=db.settings.riskPct;$('sRrMin').value=db.settings.rrMin;$('sLossDeep').value=db.settings.lossDeep;$('sTinyW').value=db.settings.tinyW;$('sNearPct').value=db.settings.nearPct;$('sFiLimit').value=db.settings.fiLimit;$('sHiLimit').value=db.settings.hiLimit;$('sHiRate').value=db.settings.hiRate;$('sLtcRate').value=db.settings.ltcRate;$('sMargTax').value=db.settings.margTax;$('sGoalMonthly').value=db.settings.goalMonthly;$('fiOther').value=db.settings.fiOther||'';$('fiAsset').value=db.settings.fiAsset||'';$('fiYield').value=db.settings.fiYield||'';$('dashMemo').value=db.memo||'';
 }
 function tab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
@@ -1505,8 +1564,9 @@ $('btnSaveSet').onclick=()=>{
   db.settings.fee=parseFloat($('sFee').value)||0;db.settings.taxStock=parseFloat($('sTaxStock').value)||0;
   db.settings.taxEtf=parseFloat($('sTaxEtf').value)||0;db.settings.auto=$('sAuto').checked;
   db.settings.isaLimit=parseFloat($('sIsaLimit').value)||0;db.settings.isaTax=parseFloat($('sIsaTax').value)||0;db.settings.divTax=parseFloat($('sDivTax').value)||0;db.settings.ccLimit=parseFloat($('sCcLimit').value)||0;
-  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
+  db.settings.riskPct=parseFloat($('sRiskPct').value)||0;db.settings.rrMin=parseFloat($('sRrMin').value)||0;db.settings.lossDeep=parseFloat($('sLossDeep').value)||0;db.settings.tinyW=parseFloat($('sTinyW').value)||0;db.settings.nearPct=parseFloat($('sNearPct').value)||0;db.settings.fiLimit=parseFloat($('sFiLimit').value)||0;db.settings.hiLimit=parseFloat($('sHiLimit').value)||0;db.settings.hiRate=parseFloat($('sHiRate').value)||0;db.settings.ltcRate=parseFloat($('sLtcRate').value)||0;db.settings.margTax=parseFloat($('sMargTax').value)||0;db.settings.goalMonthly=parseFloat($('sGoalMonthly').value)||0;save();checkForm();render();flash('설정을 저장했습니다');
 };
+['fiOther','fiAsset','fiYield'].forEach(id=>{$(id).onchange=()=>{db.settings[id]=parseFloat($(id).value)||0;save();render()}});
 $('sAuto').onchange=()=>{db.settings.auto=$('sAuto').checked;save()};
 $('btnWipe').onclick=()=>{
   if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
