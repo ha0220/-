@@ -152,6 +152,16 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
 
 <section id="t-dash" class="hide">
   <div class="card"><h2>📊 자산·포트폴리오 종합 대시보드 <span class="note" id="dashDate"></span></h2><div class="kpis" id="dashKpi"></div></div>
+  <div class="card">
+    <h2>📉 자산 추이 <span class="note">오늘 마감·현재가 반영·"지금 기록"을 할 때마다 총자산이 하루 한 번 기록됩니다</span></h2>
+    <div class="bar" style="margin:0 0 8px;align-items:end;gap:10px">
+      <div><label>기간</label><select id="snapRange" style="width:auto"><option value="3">최근 3개월</option><option value="6">최근 6개월</option><option value="12">최근 1년</option><option value="0" selected>전체</option></select></div>
+      <button id="btnSnap">📸 지금 기록</button>
+    </div>
+    <div class="kpis" id="snapKpi"></div>
+    <div id="snapChart" style="margin-top:10px"></div>
+    <details id="snapDet" style="margin-top:8px"><summary class="note" style="cursor:pointer">기록 목록 · 잘못된 기록 삭제</summary><div class="tw" id="snapList"></div></details>
+  </div>
   <div class="card"><h2>계좌별 자산 현황 요약</h2><div class="tw" id="dashAcct"></div></div>
   <div class="card">
     <h2>포트폴리오 자산 배분 구조</h2>
@@ -501,7 +511,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],snaps:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
@@ -512,7 +522,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},watch:Array.isArray(r.watch)?r.watch:[],watchAck:r.watchAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},snaps:Array.isArray(r.snaps)?r.snaps:[],watch:Array.isArray(r.watch)?r.watch:[],watchAck:r.watchAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -865,6 +875,64 @@ function renderIsa(){
   · 가입일을 넣으면 <b>가입연도부터 해마다 연 한도가 쌓이는 이월</b>을 반영해(올해까지 연 한도 × 연수, 총 한도 이내) 지금까지의 납입을 뺀 만큼을 올해 납입 가능액으로 봅니다. 가입일이 없으면 이월 없이 연 한도만 계산합니다.<br>
   · <b>한도 금액과 의무 가입기간은 제가 아는 기준(연 2,000만원·총 1억원·3년)이며 세법 개정으로 바뀔 수 있어 직접 확인한 뒤 고쳐 쓰세요.</b> 일반형·서민형 비과세 한도는 설정 탭의 "ISA 비과세 한도"와 별개입니다. ISA 계좌가 여러 개로 나뉘어 있으면 모두 합쳐서 계산합니다(본인 명의 ISA는 1인 1계좌가 원칙). 최종 한도는 증권사·금융감독원 안내로 확인하세요.</p>`;
 }
+// ---------- 자산 추이 ----------
+// 총자산(평가금액+예수금) 기록은 하루 한 번(같은 날은 덮어씀). 투자 원금(매입금액) 추이는 거래 기록만으로 다시 계산한다
+function takeSnap(c,quiet){
+  c=c||compute();
+  const sums=acctSummary(c);let tc=0,tv=0,cash=0;sums.forEach(s=>{tc+=s.cost;tv+=s.val;cash+=s.cash});
+  const date=todayStr();
+  db.snaps=db.snaps.filter(x=>x.date!==date);db.snaps.push({date,total:tv+cash,val:tv,cost:tc,cash});
+  db.snaps.sort((a,b)=>a.date.localeCompare(b.date));save();
+}
+function costSeries(){
+  const sorted=db.trades.map((t,i)=>({t,i})).sort((a,b)=>a.t.date.localeCompare(b.t.date)||(a.t.type==='기초'?0:1)-(b.t.type==='기초'?0:1)||a.i-b.i).map(x=>x.t);
+  const pos={},out=[];let tot=0;
+  for(const t of sorted){
+    const k=pk(t.acct,t.name),p=pos[k]||(pos[k]={qty:0,cost:0});
+    if(t.side==='buy'){p.qty+=t.qty;p.cost+=t.qty*t.price+t.fee+t.tax;tot+=t.qty*t.price+t.fee+t.tax}
+    else{const q=Math.min(t.qty,p.qty),basis=p.qty>0?p.cost/p.qty*q:0;p.qty-=q;p.cost-=basis;tot-=basis;if(p.qty<1e-9){tot-=p.cost;p.qty=0;p.cost=0}}
+    if(out.length&&out[out.length-1][0]===t.date)out[out.length-1][1]=tot;else out.push([t.date,tot]);
+  }
+  return out;
+}
+const addMonths=(s,n)=>{const d=new Date(s+'T00:00:00Z');d.setUTCMonth(d.getUTCMonth()+n);return d.toISOString().slice(0,10)};
+const won=v=>Math.abs(v)>=1e8?(v/1e8).toFixed(2)+'억':Math.abs(v)>=1e4?Math.round(v/1e4).toLocaleString('ko-KR')+'만':fmt(v);
+function renderSnaps(){
+  const t=todayStr(),n=+$('snapRange').value,from=n>0?addMonths(t,-n):'0000-00-00';
+  const sn=db.snaps.filter(x=>x.date>=from);
+  const net=(a,b)=>sumBy(db.flows.filter(f=>f.date>a&&f.date<=b),f=>f.type==='in'?f.amount:-f.amount);
+  if(sn.length>=2){
+    const a=sn[0],b=sn[sn.length-1],d=b.total-a.total,nd=net(a.date,b.date),perf=d-nd;
+    $('snapKpi').innerHTML=[[`시작 총자산 (${a.date})`,fmt(a.total)+'원',''],[`끝 총자산 (${b.date})`,fmt(b.total)+'원',''],['기간 증감',fmtS(d)+'원'+(a.total>0?` (${pct(d/a.total*100)})`:''),cls(d)],['같은 기간 순입금(입금−출금)',fmtS(nd)+'원',''],['순입금 제외 증감(투자 성과 추정)',fmtS(perf)+'원',cls(perf)]].map(([x,y,k])=>`<div class="kpi"><span>${x}</span><b class="${k}" style="font-size:16px">${y}</b></div>`).join('');
+  }else $('snapKpi').innerHTML='';
+  // SVG 선 그래프: 총자산(실선)과 투자 원금(점선, 거래 기준 계단)
+  const cs=costSeries(),x0=sn.length?sn[0].date:(cs.length?cs[0][0]:t),x1=t;
+  if(!sn.length){$('snapChart').innerHTML=`<p class="note">아직 기록된 자산이 없습니다. <b>📸 지금 기록</b>을 누르거나 오늘 마감·현재가 반영을 하면 오늘의 총자산이 기록되고, 쌓일수록 선 그래프가 그려집니다. 점선(투자 원금)은 거래 기록만으로도 볼 수 있습니다.</p>`+(cs.length?chartSvg([],cs,cs[0][0],t):'');return}
+  $('snapChart').innerHTML=chartSvg(sn,cs,x0,x1);
+}
+function chartSvg(sn,cs,x0,x1){
+  const W=720,H=260,L=64,R=14,T=14,B=30,day=s=>Date.parse(s+'T00:00:00Z')/864e5;
+  const costPts=[];let last=null;cs.forEach(([d,v])=>{if(d<x0)last=v;else if(d<=x1)costPts.push([d,v])});
+  if(last!==null)costPts.unshift([x0,last]);
+  const vals=[...sn.map(x=>x.total),...costPts.map(x=>x[1])];
+  const mx=Math.max(...vals,1),mn=Math.min(...vals),pad=(mx-mn)*0.1||mx*0.1||1,lo=Math.max(0,mn-pad),span=(mx+pad)-lo;
+  const d0=day(x0),d1=Math.max(day(x1),d0+1);
+  const X=s=>L+(day(s)-d0)/(d1-d0)*(W-L-R),Y=v=>T+(1-(v-lo)/span)*(H-T-B);
+  const grid=[0,0.25,0.5,0.75,1].map(f=>{const v=lo+span*f,y=Y(v);return `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--line)"/><text x="${L-6}" y="${y+4}" text-anchor="end" style="fill:var(--sub);font-size:11px">${won(v)}</text>`}).join('');
+  const step=costPts.length?costPts.map((p,i)=>`${i?`L${X(p[0])},${Y(costPts[i-1][1])} `:'M'}${X(p[0])},${Y(p[1])}`).join(' ')+` L${X(x1)},${Y(costPts[costPts.length-1][1])}`:'';
+  const line=sn.map(p=>`${X(p.date)},${Y(p.total)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto" role="img" aria-label="자산 추이 그래프">${grid}
+  <text x="${L}" y="${H-8}" style="fill:var(--sub);font-size:11px">${x0}</text><text x="${W-R}" y="${H-8}" text-anchor="end" style="fill:var(--sub);font-size:11px">${x1}</text>
+  ${step?`<path d="${step}" fill="none" style="stroke:var(--sub)" stroke-width="1.5" stroke-dasharray="5 4"/>`:''}
+  ${sn.length>1?`<polyline points="${line}" fill="none" style="stroke:var(--pri)" stroke-width="2"/>`:''}
+  ${sn.map(p=>`<circle cx="${X(p.date)}" cy="${Y(p.total)}" r="3.5" style="fill:var(--pri)"><title>${p.date} 총자산 ${fmt(p.total)}원 (평가 ${fmt(p.val)} + 예수금 ${fmt(p.cash)} / 매입 ${fmt(p.cost)})</title></circle>`).join('')}
+  </svg><div class="note"><span style="color:var(--pri)">━</span> 총자산(평가금액+예수금, 기록한 날) · <span>┅</span> 투자 원금(매입금액, 거래 기록 기준)</div>`;
+}
+function renderSnapList(){
+  $('snapList').innerHTML=db.snaps.length?`<table><tr><th>날짜</th><th>총자산</th><th>평가금액</th><th>예수금</th><th>매입금액</th><th></th></tr>${[...db.snaps].reverse().slice(0,60).map(x=>`<tr><td class="l">${x.date}</td><td>${fmt(x.total)}</td><td>${fmt(x.val)}</td><td>${fmt(x.cash)}</td><td>${fmt(x.cost)}</td><td><button class="sm del" data-sd="${x.date}">삭제</button></td></tr>`).join('')}</table>${db.snaps.length>60?`<p class="note">최근 60건만 표시합니다(전체 ${db.snaps.length}건).</p>`:''}`:'<p class="note">기록이 없습니다.</p>';
+  const det=$('snapDet');if(det)det.open=snapOpen;
+}
+let snapOpen=false;
 // ---------- 배당 포함 총수익률 ----------
 // 총손익 = 평가손익 + 실현손익(비용 차감 후) + 받은 분배금(실수령).  외부 투입 원금 = 매수금액(수수료·세금 포함) − 분배금 재투자 매수
 function trData(c){
@@ -1541,7 +1609,7 @@ function applyPrices(){
   const before=alertSnap(compute()),wbefore=watchSnap(compute());
   r.rows.forEach(x=>{db.prices[x.name]=x.price});
   const d=new Date();db.pricesAt=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16).replace('T',' ');
-  save();$('pricePaste').value='';$('pricePasteOut').innerHTML='';render();
+  save();takeSnap();$('pricePaste').value='';$('pricePasteOut').innerHTML='';render();
   const big=r.rows.filter(x=>x.chg!==null&&Math.abs(x.chg)>=30).length;
   const fresh=Object.entries(alertSnap(compute())).filter(([n,k])=>before[n]!==k).concat(Object.entries(watchSnap(compute())).filter(([n,k])=>wbefore[n]!==k));
   flash(`현재가 ${r.rows.length}종목 갱신`+(r.missing.length?` · 미갱신 ${r.missing.length}종목`:'')+(big?` · ⚠ 변동 30% 이상 ${big}종목 확인`:'')+(fresh.length?` · 🔔 새 가격 알림 ${fresh.length}건`:''),big||r.missing.length||fresh.length?'warn':'ok');
@@ -1693,6 +1761,7 @@ function closeDay(date){
   }
   if(c.errors.length)lines.push('','⚠ 확인 필요',...c.errors.map(e=>'· '+e));
   const text=lines.join('\n');
+  if(date===todayStr())takeSnap(c);
   db.closes=db.closes.filter(x=>x.date!==date);db.closes.push({date,text,realized,cost,at:new Date().toISOString()});
   save();
   $('report').textContent=text;$('reportCard').classList.remove('hide');
@@ -1930,6 +1999,7 @@ function render(){
   renderPlan(c);
   renderTotalReturn(c);
   renderIsa();
+  renderSnaps();renderSnapList();
   renderDash(c);
   renderRules(c);
   // 매매일지
@@ -2039,7 +2109,7 @@ $('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){if($('pricePaste').va
 $('btnInit').onclick=applyInit;
 $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n){chkManual[n]=e.target.value;renderRuleCheck(autoChecks())}});
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
-document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open;if(e.target.id==='calDet')calOpen=e.target.open;if(e.target.id==='stkDet')stkOpen=e.target.open},true);
+document.addEventListener('toggle',e=>{if(e.target.id==='catDet')catOpen=e.target.open;if(e.target.id==='layerDet')layerOpen=e.target.open;if(e.target.id==='calDet')calOpen=e.target.open;if(e.target.id==='stkDet')stkOpen=e.target.open;if(e.target.id==='snapDet')snapOpen=e.target.open},true);
 $('dashMemo').addEventListener('input',()=>{db.memo=$('dashMemo').value;save()});
 ['rvPreset','rvFrom','rvTo'].forEach(id=>{$(id).onchange=()=>render()});
 $('rvNote').onchange=()=>{const v=$('rvNote').value.trim();if(v)db.reviews[rvKey]=v;else delete db.reviews[rvKey];save()};
@@ -2062,6 +2132,8 @@ $('btnDApply').onclick=applyDiv;
 $('btnDCsv').onclick=downloadDivCsv;
 $('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);flash('복사했습니다')}catch(e){flash('복사 실패: 직접 선택해서 복사하세요','warn')}};
 $('btnWAdd').onclick=addWatch;
+$('btnSnap').onclick=()=>{takeSnap();render();flash('오늘의 총자산을 기록했습니다')};
+$('snapRange').onchange=()=>render();
 $('btnBackup').onclick=()=>downloadBackup();
 $('btnCsv').onclick=downloadCsv;
 $('btnCsvHold').onclick=downloadHoldCsv;
@@ -2082,6 +2154,7 @@ document.body.addEventListener('click',e=>{
   if(e.target.dataset.ack){const it=alertItems(compute()).find(x=>x.name===e.target.dataset.ack);if(it){db.alertAck[it.name]=it.key;save();render()}}
   if(e.target.dataset.bk==='now'){downloadBackup();render()}
   if(e.target.dataset.bk==='snooze'){db.backupSnooze=todayStr();save();render()}
+  if(e.target.dataset.sd){db.snaps=db.snaps.filter(x=>x.date!==e.target.dataset.sd);save();render()}
   if(e.target.dataset.wack){const it=watchItems(compute()).find(x=>x.w.id===e.target.dataset.wack);if(it&&it.a){db.watchAck[it.w.id]=it.a.key;save();render()}}
   if(e.target.dataset.wbuy)watchToTrade(e.target.dataset.wbuy);
   if(e.target.dataset.wdel){const w=db.watch.find(x=>x.id===e.target.dataset.wdel);if(w&&confirm(`관심종목 '${w.name}'을(를) 삭제할까요?`)){db.watch=db.watch.filter(x=>x.id!==w.id);delete db.watchAck[w.id];save();render()}}
