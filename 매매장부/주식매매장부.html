@@ -170,7 +170,7 @@ h3{font-size:14px;margin:14px 0 6px}
   </div>
   <div class="card">
     <h2>기초 보유 등록 <span class="note">처음 한 번, 지금 보유 중인 종목을 장부에 올립니다</span></h2>
-    <p class="note" style="margin:0 0 8px">엑셀 보유주식 시트에서 행을 복사해 붙여넣으면 됩니다. 앞에서부터 <code>종목명 · (섹터) · 보유수량 · 매입단가 · 현재가</code> 순서로 읽고, 합계 줄과 머리글은 건너뜁니다. ISA 시트 행이면 <code>월배당 · 6.50%</code>처럼 붙은 배당 주기와 연간 예상 배당률도 읽습니다. 수수료·세금 없이 매입단가 그대로 평단이 됩니다.</p>
+    <p class="note" style="margin:0 0 8px">엑셀 보유주식 시트에서 행을 복사해 붙여넣으면 됩니다. 앞에서부터 <code>종목명 · (섹터) · 보유수량 · 매입단가 · 현재가</code> 순서로 읽고, 합계 줄과 머리글은 건너뜁니다. ISA 시트 행이면 <code>월배당 · 6.50%</code>처럼 붙은 배당 주기·연간 예상 배당률과 맨 끝의 절세·운용 가이드 문구도 읽습니다. 수수료·세금 없이 매입단가 그대로 평단이 됩니다.</p>
     <div class="grid" style="margin-bottom:8px"><div><label>계좌</label><input id="iAcct" list="acctList" placeholder="종합위탁"></div><div><label>기준일</label><input type="date" id="iDate"></div></div>
     <textarea id="initPaste" placeholder="현대차	자동차/모빌리티	50	490,588	353,500"></textarea>
     <div class="bar" style="margin:10px 0 0"><button class="pri" id="btnInit">기초 보유로 등록</button></div>
@@ -617,11 +617,11 @@ function parseInit(text){
     if(/^(합계|총\s*합계|종목명|Total)/.test(line))continue;
     const tab=line.includes('\t');
     const toks=(tab?line.split('\t'):line.split(/\s+/)).map(s=>s.trim()).filter(Boolean);
-    let name,sector='',nums=[],cycle='',yld=0;
+    let name,sector='',nums=[],cycle='',yld=0,guide='';
     if(tab){
       name=toks[0];
       const ci=toks.findIndex(k=>/^(월|분기|반기|연)\s*배당$/.test(k));
-      if(ci>0){cycle=toks[ci];const y=(toks[ci+1]||'').replace('%','');if(/^\d+(\.\d+)?$/.test(y))yld=parseFloat(y)}
+      if(ci>0){cycle=toks[ci];const y=(toks[ci+1]||'').replace('%','');if(/^\d+(\.\d+)?$/.test(y))yld=parseFloat(y);const g=toks[ci+4];if(g&&!/^[-+]?[\d,.]+%?$/.test(g))guide=g}
       if(toks[1]&&!/^[-+]?[\d,.]+%?$/.test(toks[1]))sector=toks[1];
       for(const k of toks.slice(1)){const n=k.replace(/[,원주]/g,'');if(/^\d+(\.\d+)?$/.test(n))nums.push(parseFloat(n))}
     }else{
@@ -630,7 +630,7 @@ function parseInit(text){
       name=nm.join(' ');
     }
     if(!name||nums.length<2||!(nums[0]>0)){bad.push(line);continue}
-    out.push({name,sector,qty:nums[0],avg:nums[1],cur:nums[2]>0?nums[2]:0,cycle,yld});
+    out.push({name,sector,qty:nums[0],avg:nums[1],cur:nums[2]>0?nums[2]:0,cycle,yld,guide});
   }
   return {out,bad};
 }
@@ -647,6 +647,7 @@ function applyInit(){
     if(o.sector){(db.meta[o.name]||(db.meta[o.name]={})).sector=o.sector}
     if(o.cycle){(db.meta[o.name]||(db.meta[o.name]={})).cycle=o.cycle}
     if(o.yld>0){(db.meta[o.name]||(db.meta[o.name]={})).yield=o.yld}
+    if(o.guide){(db.meta[o.name]||(db.meta[o.name]={})).guide=o.guide}
   }
   save();$('initPaste').value='';
   $('initOut').innerHTML=bad.length?`<div class="msg warn">읽지 못한 줄 ${bad.length}건:<br>${bad.map(esc).join('<br>')}</div>`:'';
@@ -939,7 +940,7 @@ function tradeRows(list,c,full){
     const ratio=t.side==='buy'?rr(t.price,t.stop,t.target):null;
     return `<tr>${base}<td class="l">${esc(t.type||'')}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${fmt(t.qty*t.price)}</td><td>${fmt(t.fee)}</td><td>${fmt(t.tax)}</td><td class="l wrap">${esc(t.reason||'')}</td><td>${t.stop>0?fmt(t.stop):''}</td><td>${t.target>0?fmt(t.target):''}</td><td>${ratio===null?'':ratio.toFixed(1)}</td><td>${t.side==='sell'?t.date+' · '+fmt(t.price):''}</td>${real}<td class="l note wrap">${esc(t.memo)}</td>${cashCell}${btn}</tr>`}).join('')}</table>`;
 }
-function inp(id,val,align){return `<input class="hin${align==='t'?' t':''}" data-id="${esc(id)}" ${align==='t'?'type="text"':'type="number" step="any"'} value="${esc(val||'')}" style="width:${align==='t'?'220px':'105px'}">`}
+function inp(id,val,align,ph){return `<input class="hin${align==='t'?' t':''}" data-id="${esc(id)}" ${align==='t'?'type="text"':'type="number" step="any"'} value="${esc(val||'')}"${ph?` placeholder="${esc(ph)}"`:''} style="width:${align==='t'?'220px':'105px'}">`}
 function acctTable(sums,tv,tc,tcash,edit){
   if(!sums.length)return '<p class="note">보유 종목이 없습니다. 보유 현황 탭의 "기초 보유 등록"으로 현재 보유분을 올리거나 매수 거래를 입력하세요.</p>';
   return `<table><tr><th>계좌</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>${edit?'예수금(입력)':'예수금'}</th><th>계좌 총자산</th><th>자산 비중</th></tr>${sums.map(s=>`<tr><td class="l">${esc(acctLabel(s.acct))}${s.miss?` <span class="note">(현재가 미입력 ${s.miss})</span>`:''}</td><td>${fmt(s.cost)}</td><td>${fmt(s.val)}</td><td class="${cls(s.val-s.cost)}">${fmtS(s.val-s.cost)}</td><td class="${cls(s.val-s.cost)}">${s.cost>0?pct((s.val-s.cost)/s.cost*100):'-'}</td><td>${edit?`<input class="hin cash" data-id="cash|${esc(s.acct)}" type="number" step="any" value="${s.cash||''}" style="width:115px">`:fmt(s.cash)}</td><td>${fmt(s.total)}</td><td>${tv+tcash>0?(s.total/(tv+tcash)*100).toFixed(2)+'%':'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td>${fmt(tc)}</td><td>${fmt(tv)}</td><td class="${cls(tv-tc)}">${fmtS(tv-tc)}</td><td class="${cls(tv-tc)}">${tc>0?pct((tv-tc)/tc*100):'-'}</td><td>${fmt(tcash)}</td><td>${fmt(tv+tcash)}</td><td>100.00%</td></tr></table>`;
@@ -1082,11 +1083,11 @@ function render(){
   const heldN=heldList(c).length;
   $('holdKpi').innerHTML=[['총 자산(평가+예수금)',fmt(tv+tcash)+'원',''],['총 투자 원금(매입)',fmt(tc)+'원',''],['총 평가손익',fmtS(tv-tc)+'원',cls(tv-tc)],['포트폴리오 수익률',tc>0?pct((tv-tc)/tc*100):'-',cls(tv-tc)],['총 예수금',fmt(tcash)+'원',''],['누적 실현손익',fmtS(totReal)+'원',cls(totReal)],['보유 종목',heldN+'개','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
   $('acctTable').innerHTML=negCashNote()+acctTable(sums,tv,tc,tcash,true);
-  $('holdTables').innerHTML=sums.filter(s=>s.hs.length).map(s=>`<div class="card"><h2>${esc(acctLabel(s.acct))} 보유 종목</h2><div class="tw"><table><tr><th>종목명</th><th>섹터 / 업종</th><th>보유수량</th><th>매입단가</th><th>현재가(입력)</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>계좌 비중</th><th>1차 목표가</th><th>손절 기준가</th><th>상태</th><th>대응 전략 · 포지션 상태</th></tr>${s.hs.map(p=>{
+  $('holdTables').innerHTML=sums.filter(s=>s.hs.length).map(s=>`<div class="card"><h2>${esc(acctLabel(s.acct))} 보유 종목</h2><div class="tw"><table><tr><th>종목명</th><th>섹터 / 업종</th><th>보유수량</th><th>매입단가</th><th>현재가(입력)</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>계좌 비중</th><th>1차 목표가</th><th>손절 기준가</th><th>상태</th><th>대응 전략 · 포지션 상태</th><th>절세 · 운용 가이드</th></tr>${s.hs.map(p=>{
     const px=db.prices[p.name]||0,m=db.meta[p.name]||{};
     const v=px>0?px*p.qty:null,pl=v===null?null:v-p.cost;
     const w=s.val>0?((v===null?p.cost:v)/s.val*100).toFixed(2)+'%':'-';
-    return `<tr><td class="l">${esc(p.name)}</td><td>${inp('sector|'+p.name,m.sector,'t')}</td><td>${fmt(p.qty)}</td><td>${fmt(p.cost/p.qty)}</td><td>${inp('px|'+p.name,px)}</td><td>${fmt(p.cost)}</td><td>${v===null?'-':fmt(v)}</td><td class="${cls(pl)}">${pl===null?'-':fmtS(pl)}</td><td class="${cls(pl)}">${pl===null?'-':pct(pl/p.cost*100)}</td><td>${w}</td><td>${inp('target|'+p.name,m.target)}</td><td>${inp('stop|'+p.name,m.stop)}</td><td class="l">${status(p)}</td><td>${inp('plan|'+p.name,m.plan,'t')}</td></tr>`}).join('')}</table></div></div>`).join('');
+    return `<tr><td class="l">${esc(p.name)}</td><td>${inp('sector|'+p.name,m.sector,'t')}</td><td>${fmt(p.qty)}</td><td>${fmt(p.cost/p.qty)}</td><td>${inp('px|'+p.name,px)}</td><td>${fmt(p.cost)}</td><td>${v===null?'-':fmt(v)}</td><td class="${cls(pl)}">${pl===null?'-':fmtS(pl)}</td><td class="${cls(pl)}">${pl===null?'-':pct(pl/p.cost*100)}</td><td>${w}</td><td>${inp('target|'+p.name,m.target)}</td><td>${inp('stop|'+p.name,m.stop)}</td><td class="l">${status(p)}</td><td>${inp('plan|'+p.name,m.plan,'t')}</td><td>${inp('guide|'+p.name,m.guide,'t','예: ISA 한도 내 분배금 재투자')}</td></tr>`}).join('')}</table></div></div>`).join('');
   // 예상 분배금
   const inc=incomeRows(c),it=incomeTotals(inc);
   $('incomeTable').innerHTML=inc.length?`<table><tr><th>계좌</th><th class="l">종목명</th><th>보유수량</th><th>평가금액</th><th>비중</th><th>배당 주기</th><th>연간 예상 배당률(%)</th><th>예상 월 분배금</th><th>예상 연 배당금</th></tr>${inc.map(r=>`<tr><td class="l">${esc(acctLabel(r.p.acct))}</td><td class="l">${esc(r.p.name)}</td><td>${fmt(r.p.qty)}</td><td>${fmt(r.val)}</td><td>${it.val>0?(r.val/it.val*100).toFixed(2)+'%':'-'}</td><td><input class="hin t" data-id="cycle|${esc(r.p.name)}" list="cycleList" value="${esc(r.m.cycle||'')}" style="width:100px"></td><td>${inp('yield|'+r.p.name,r.m.yield)}</td><td>${r.y>0?fmt(r.monthly):'-'}</td><td>${r.y>0?fmt(r.yearly):'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td class="l">${inc.length}개 종목</td><td></td><td>${fmt(it.val)}</td><td>100.00%</td><td>월 환산</td><td>${it.rate.toFixed(2)}%</td><td><b>${fmt(it.monthly)}</b></td><td><b>${fmt(it.yearly)}</b></td></tr></table>`:'<p class="note">ETF나 ISA 계좌 보유 종목이 없습니다.</p>';
@@ -1146,9 +1147,9 @@ function downloadHoldCsv(){
   for(const s of acctSummary(c))for(const p of s.hs){
     const px=db.prices[p.name]||0,m=db.meta[p.name]||{},v=px>0?px*p.qty:'';
     rows.push([s.acct?s.acct:NOACCT,p.name,m.sector||'',p.qty,Math.round(p.cost/p.qty),px||'',Math.round(p.cost),v===''?'':Math.round(v),v===''?'':Math.round(v-p.cost),v===''?'':((v-p.cost)/p.cost*100).toFixed(2),s.val>0?((v===''?p.cost:v)/s.val*100).toFixed(2):'',m.target||'',m.stop||'',m.plan||'',
-      m.cycle||'',m.yield||'',m.yield>0?Math.round((v===''?p.cost:v)*m.yield/100/12):'',m.yield>0?Math.round((v===''?p.cost:v)*m.yield/100):'']);
+      m.cycle||'',m.yield||'',m.yield>0?Math.round((v===''?p.cost:v)*m.yield/100/12):'',m.yield>0?Math.round((v===''?p.cost:v)*m.yield/100):'',m.guide||'']);
   }
-  saveCsv(`보유현황_${todayStr()}.csv`,['계좌','종목명','섹터 / 업종','보유수량','매입단가(원)','현재가(원)','매입금액(원)','평가금액(원)','평가손익(원)','수익률(%)','계좌 비중(%)','1차 목표가(원)','손절 기준가(원)','스윙 대응 전략과 포지션 상태','배당 주기','연간 예상 배당률(%)','예상 월 분배금(원)','예상 연 배당금(원)'],rows);
+  saveCsv(`보유현황_${todayStr()}.csv`,['계좌','종목명','섹터 / 업종','보유수량','매입단가(원)','현재가(원)','매입금액(원)','평가금액(원)','평가손익(원)','수익률(%)','계좌 비중(%)','1차 목표가(원)','손절 기준가(원)','스윙 대응 전략과 포지션 상태','배당 주기','연간 예상 배당률(%)','예상 월 분배금(원)','예상 연 배당금(원)','절세 및 운용 가이드'],rows);
   flash('엑셀 보유주식 열 순서로 CSV를 저장했습니다.');
 }
 function restore(file){
@@ -1242,7 +1243,7 @@ document.body.addEventListener('change',e=>{
   else if(kind==='px'){if(n>0)db.prices[key]=n;else delete db.prices[key]}
   else{
     const m=db.meta[key]||(db.meta[key]={});
-    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'){if(v)m[kind]=v;else delete m[kind]}
+    if(kind==='sector'||kind==='plan'||kind==='cycle'||kind==='cat'||kind==='guide'){if(v)m[kind]=v;else delete m[kind]}
     else{if(n>0)m[kind]=n;else delete m[kind]}
   }
   save();
