@@ -122,6 +122,15 @@ h3{font-size:14px;margin:14px 0 6px}
   </div>
 
   <div class="card">
+    <h2>현재가 붙여넣기 <span class="note">보유 종목 현재가를 한 번에 갱신 · 오늘 마감 버튼에도 함께 적용</span></h2>
+    <p class="note" style="margin:0 0 8px">증권사 앱·네이버 증권의 <b>종목명 · 현재가</b> 목록을 복사해 붙이세요. <b>보유 중인 종목과 이름이 맞는 줄만</b> 읽고 나머지는 무시합니다. 예) <code>삼성전자 285,500</code> · <code>삼성전자	285,500	▲1,500	+0.53%</code> · <code>KODEX 200,35100</code>. 머리글에 <b>종목명</b>·<b>현재가</b> 열이 있는 표는 열 위치로 읽습니다. 등락 표시(▲▼ +−%)가 붙은 숫자와 거래량 등 다른 숫자는 현재가로 읽지 않습니다.</p>
+    <textarea id="pricePaste" placeholder="삼성전자	285,500
+KODEX 미국배당커버드콜액티브	12,340"></textarea>
+    <div class="bar" style="margin:10px 0 0"><button id="btnPriceParse">미리보기</button><button class="pri" id="btnPriceApply">현재가 반영</button></div>
+    <div id="pricePasteOut"></div>
+  </div>
+
+  <div class="card">
     <h2>오늘 거래 <span class="note" id="todayLabel"></span></h2>
     <div class="tw" id="todayTable"></div>
   </div>
@@ -158,6 +167,7 @@ h3{font-size:14px;margin:14px 0 6px}
 
 <section id="t-hold" class="hide">
   <div class="card"><div class="kpis" id="holdKpi"></div></div>
+  <div class="note" id="priceStamp" style="margin:-6px 4px 12px"></div>
   <div class="card">
     <h2>계좌별 자산 현황 <span class="note">현재가·예수금은 직접 입력 (자동 시세 조회 없음). 현재가 미입력 종목은 매입금액으로 평가합니다.</span></h2>
     <div class="tw" id="acctTable"></div>
@@ -357,7 +367,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={macro:DEF_MACRO,road:DEF_ROAD,memo:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1}};
+const defaults={macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],settings:{fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1}};
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
@@ -367,7 +377,7 @@ function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},memo:r.memo||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -944,6 +954,78 @@ function downloadFlowCsv(){
   flash('입출금 내역을 CSV로 저장했습니다.');
 }
 
+// ---------- 현재가 붙여넣기 ----------
+const reEsc=t=>t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+// 종목명 사이의 공백 차이를 허용해 찾는다. 더 긴 이름의 일부(삼성전자우 ⊃ 삼성전자, 전자 ⊂ 삼성전자)는 거른다
+function findHolding(text,names){
+  let best=null;
+  for(const n of names){
+    const m=new RegExp(n.replace(/\s+/g,'').split('').map(reEsc).join('\\s*'),'i').exec(text);
+    if(!m)continue;
+    const end=m.index+m[0].length,prev=text[m.index-1],next=text[end];
+    if(prev&&/[A-Za-z가-힣0-9]/.test(prev))continue;
+    if(next&&/[A-Za-z가-힣]/.test(next))continue;
+    if(!best||m[0].length>best.len)best={name:n,len:m[0].length,rest:text.slice(end)};
+  }
+  return best;
+}
+// 이름 뒤에서 첫 번째 '등락 표시가 없는' 숫자를 현재가로 본다
+function priceFromRest(rest){
+  const re=/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;let m;
+  while((m=re.exec(rest))){
+    const pre=rest.slice(0,m.index).trimEnd(),pc=pre[pre.length-1]||'',after=rest[m.index+m[0].length]||'';
+    if(/[+\-▲▼△▽↑↓]/.test(pc)||after==='%')continue;
+    const v=parseFloat(m[0].replace(/,/g,''));
+    if(v>0)return v;
+  }
+  return null;
+}
+function parsePrices(text){
+  const names=[...new Set(heldList(compute()).map(p=>p.name))];
+  const found={},order=[],unmatched=[];let cols=null,dups=0;
+  const take=(name,price)=>{if(name in found){dups++}else order.push(name);found[name]=price};
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;
+    const cells=raw.split('\t').map(x=>x.trim());
+    if(cells.length>=3&&!cells.some(c=>/\d{3}/.test(c))){
+      const iN=cells.findIndex(c=>/종목/.test(c)),iP=cells.findIndex(c=>/현재가|종가|체결가|기준가/.test(c));
+      if(iP>=0){cols={n:iN>=0?iN:0,p:iP};continue}
+    }
+    if(!/\d/.test(line))continue;
+    let hit=null,price=null;
+    if(cols&&cells.length>cols.p){
+      hit=findHolding(cells[cols.n]||'',names);
+      if(hit)price=priceFromRest(' '+(cells[cols.p]||''));
+    }else{
+      hit=findHolding(line,names);
+      if(hit)price=priceFromRest(hit.rest);
+    }
+    if(hit&&price>0)take(hit.name,price);else unmatched.push(line);
+  }
+  const old=n=>db.prices[n]||0;
+  const rows=order.map(n=>({name:n,price:found[n],old:old(n),chg:old(n)>0?(found[n]-old(n))/old(n)*100:null}));
+  return {rows,unmatched,dups,missing:names.filter(n=>!(n in found))};
+}
+function previewPrices(){
+  const r=parsePrices($('pricePaste').value);let h='';
+  if(r.rows.length)h+=`<div class="tw"><table><tr><th class="l">종목</th><th>기존 현재가</th><th>새 현재가</th><th>변동</th><th class="l">확인</th></tr>${r.rows.map(x=>`<tr><td class="l">${esc(x.name)}</td><td>${x.old?fmt(x.old):'-'}</td><td><b>${fmt(x.price)}</b></td><td class="${cls(x.chg||0)}">${x.chg===null?'-':pct(x.chg)}</td><td class="l ${x.chg!==null&&Math.abs(x.chg)>=30?'up':'note'}">${x.chg!==null&&Math.abs(x.chg)>=30?'⚠ 변동이 큽니다 — 종목·단위 확인':''}</td></tr>`).join('')}</table></div>`;
+  if(r.dups)h+=`<div class="note" style="margin-top:6px">같은 종목이 여러 번 나와 마지막 값을 사용했습니다 (${r.dups}건).</div>`;
+  if(r.missing.length)h+=`<div class="note" style="margin-top:6px">붙여넣은 내용에 없는 보유 종목 ${r.missing.length}개 (현재가는 그대로): ${esc(r.missing.join(', '))}</div>`;
+  if(r.unmatched.length)h+=`<details style="margin-top:6px"><summary class="note" style="cursor:pointer">보유 종목과 맞지 않아 무시한 줄 ${r.unmatched.length}건 (눌러서 보기)</summary><div class="note">${r.unmatched.map(esc).join('<br>')}</div></details>`;
+  if(!r.rows.length)h=`<div class="msg warn">보유 종목과 이름이 맞는 줄이 없습니다. 종목명이 보유 현황의 이름과 같은지 확인하세요.</div>`+h;
+  $('pricePasteOut').innerHTML=h;return r;
+}
+function applyPrices(){
+  const r=previewPrices();
+  if(!r.rows.length){flash('반영할 현재가가 없습니다','warn');return false}
+  r.rows.forEach(x=>{db.prices[x.name]=x.price});
+  const d=new Date();db.pricesAt=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16).replace('T',' ');
+  save();$('pricePaste').value='';$('pricePasteOut').innerHTML='';render();
+  const big=r.rows.filter(x=>x.chg!==null&&Math.abs(x.chg)>=30).length;
+  flash(`현재가 ${r.rows.length}종목 갱신`+(r.missing.length?` · 미갱신 ${r.missing.length}종목`:'')+(big?` · ⚠ 변동 30% 이상 ${big}종목 확인`:''),big||r.missing.length?'warn':'ok');
+  return r.rows.length;
+}
+
 // ---------- 마감 ----------
 function closeDay(date){
   date=date||$('fDate').value||todayStr();
@@ -1093,7 +1175,7 @@ function dashText(d){
 let catOpen=false;
 function renderDash(c){
   const d=dashData(c);
-  $('dashDate').textContent=`기준일 ${todayStr()} · 현재가 입력 ${d.held.length-d.missing}/${d.held.length}종목`;
+  $('dashDate').textContent=`기준일 ${todayStr()} · 현재가 입력 ${d.held.length-d.missing}/${d.held.length}종목`+(db.pricesAt?` · 마지막 일괄 갱신 ${db.pricesAt}`:'');
   $('dashKpi').innerHTML=[['총 자산 평가액(예수금 포함)',fmt(d.total)+'원',''],['총 투자 원금(매입)',fmt(d.tc)+'원',''],['총 평가손익',fmtS(d.tv-d.tc)+'원',cls(d.tv-d.tc)],['포트폴리오 총 수익률',d.tc>0?pct((d.tv-d.tc)/d.tc*100):'-',cls(d.tv-d.tc)],['총 예수금(현금)',fmt(d.tcash)+'원',''],['올해 실현손익',fmtS(d.realYear)+'원',cls(d.realYear)],['올해 받은 분배금(세전)',fmt(d.divYear)+'원','']].map(([a,b,k])=>`<div class="kpi"><span>${a}</span><b class="${k}">${b}</b></div>`).join('');
   $('dashAcct').innerHTML=acctTable(d.sums,d.tv,d.tc,d.tcash,false);
   const rows=CATS.filter(k=>d.cats[k].items.length).map(k=>({k,val:d.cats[k].val,items:[...d.cats[k].items].sort((a,b)=>posVal(b)-posVal(a))}));
@@ -1181,6 +1263,7 @@ function render(){
   const lim=db.settings.isaLimit,over=Math.max(0,it.isaYear-lim);
   $('incomeNote').innerHTML=it.isaYear>0?`ISA 계좌 예상 연 분배금 ${fmt(it.isaYear)}원 → 비과세 한도 ${fmt(lim)}원의 ${(it.isaYear/lim*100).toFixed(0)}%`+(over>0?` · 초과 예상 ${fmt(over)}원에 ${db.settings.isaTax}% 분리과세 시 약 ${fmt(over*db.settings.isaTax/100)}원`:' · 한도 이내')+`<br>분배금만 단순 추정한 값입니다. ISA 안의 매매손익 통산, 실제 분배금 변동(커버드콜 등), 원천징수 시점은 반영하지 않습니다.`:'ISA 계좌 종목에 배당률을 입력하면 비과세 한도 대비 예상치가 나옵니다.';
   renderDiv(c);
+  $('priceStamp').textContent=db.pricesAt?`현재가 마지막 일괄 갱신: ${db.pricesAt} (붙여넣기 기준, 개별 입력은 포함하지 않음)`:'현재가는 직접 입력하거나, 오늘 입력 탭의 "현재가 붙여넣기"로 한 번에 갱신할 수 있습니다.';
   renderFlow();
   renderDash(c);
   renderRules(c);
@@ -1267,10 +1350,13 @@ formGrid.addEventListener('input',checkForm);
 formGrid.addEventListener('change',checkForm);
 $('btnClose').onclick=()=>{
   if($('paste').value.trim()&&!applyPaste())return;
+  if($('pricePaste').value.trim()&&!applyPrices())return;
   closeDay();
 };
+$('btnPriceParse').onclick=previewPrices;
+$('btnPriceApply').onclick=applyPrices;
 $('btnParse').onclick=previewPaste;
-$('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){flash(`${n}건 반영`);closeDay()}};
+$('btnPasteClose').onclick=()=>{const n=applyPaste();if(n){if($('pricePaste').value.trim()&&!applyPrices())return;flash(`${n}건 반영`);closeDay()}};
 $('btnInit').onclick=applyInit;
 $('ruleCheck').addEventListener('change',e=>{const n=e.target.dataset.rule;if(n){chkManual[n]=e.target.value;renderRuleCheck(autoChecks())}});
 $('btnMacroAdd').onclick=()=>{db.macro.push({item:'',metric:'',good:'',bad:'',guide:'',state:'',note:''});save();renderMacro()};
