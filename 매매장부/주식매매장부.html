@@ -96,7 +96,7 @@ h3{font-size:14px;margin:14px 0 6px}
     <h2 id="formTitle">매매 입력 · 매매일지 기록</h2>
     <div class="grid">
       <div><label>거래일자</label><input type="date" id="fDate"></div>
-      <div><label>계좌</label><input id="fAcct" list="acctList" placeholder="종합위탁"></div>
+      <div><label>계좌</label><select id="fAcct"></select></div>
       <div><label>구분</label><select id="fSide"><option value="buy">매수</option><option value="sell">매도</option></select></div>
       <div><label>매매구분</label><input id="fType" list="typeList" placeholder="신규매수·돌파매수·익절…"></div>
       <div><label>종목명</label><input id="fName" list="nameList" placeholder="예: 삼성전자"></div>
@@ -111,7 +111,7 @@ h3{font-size:14px;margin:14px 0 6px}
       <div style="grid-column:span 2"><label>진입근거 / 기술적 타점</label><input id="fReason"></div>
       <div style="grid-column:span 2"><label>매매 복기 · 반성</label><input id="fMemo"></div>
     </div>
-    <datalist id="nameList"></datalist><datalist id="acctList"></datalist><datalist id="cycleList"><option value="월배당"><option value="분기배당"><option value="반기배당"><option value="연배당"></datalist>
+    <datalist id="nameList"></datalist><datalist id="cycleList"><option value="월배당"><option value="분기배당"><option value="반기배당"><option value="연배당"></datalist>
     <datalist id="typeList"><option value="신규매수"><option value="돌파매수"><option value="눌림목매수"><option value="추가매수"><option value="물타기"><option value="분할익절"><option value="손절"><option value="전량청산"></datalist>
     <div id="chk"></div>
     <details id="ruleDet" style="margin-top:10px">
@@ -127,7 +127,7 @@ h3{font-size:14px;margin:14px 0 6px}
 
   <div class="card">
     <h2>체결내역 붙여넣기 (증권사 화면/엑셀에서 복사)</h2>
-    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-23 삼성전자 매도 4 285500</code> — 탭·쉼표·공백 구분 모두 가능, 수량 뒤에 단가. 줄 안에 <code>종합위탁</code>·<code>ISA</code>가 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 위의 "예수금에 반영" 체크가 붙여넣기에도 적용됩니다. 진입근거·손절가는 붙여넣기 후 매매일지 탭에서 수정하세요.</p>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-23 삼성전자 매도 4 285500</code> — 탭·쉼표·공백 구분 모두 가능, 수량 뒤에 단가. 줄 안에 등록한 계좌 이름(또는 <code>위탁</code>·<code>ISA</code>)이 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 위의 "예수금에 반영" 체크가 붙여넣기에도 적용됩니다. 진입근거·손절가는 붙여넣기 후 매매일지 탭에서 수정하세요.</p>
     <textarea id="paste" placeholder="2026-10-23	삼성전자	매수	10	285500"></textarea>
     <div class="bar" style="margin:10px 0 0">
       <button id="btnParse">미리보기</button>
@@ -220,6 +220,20 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <h2>계좌별 자산 현황 <span class="note">현재가·예수금은 직접 입력 (자동 시세 조회 없음). 현재가 미입력 종목은 매입금액으로 평가합니다.</span></h2>
     <div class="tw" id="acctTable"></div>
   </div>
+  <div class="card">
+    <h2>계좌 관리 <span class="note">계좌를 등록해 두면 거래·분배금·입출금·기초 보유 입력에서 목록으로 고를 수 있습니다</span></h2>
+    <div class="tw" id="acctMgr"></div>
+    <div class="grid" id="aForm" style="margin-top:10px">
+      <div><label>계좌 이름</label><input id="aName" placeholder="예: 연금저축, 퇴직연금 IRP, 배우자 위탁"></div>
+      <div><label>종류</label><select id="aType"><option value="general">일반 위탁(과세)</option><option value="isa">ISA</option><option value="pension">연금·퇴직연금</option></select></div>
+      <div><label>메모 (증권사 등)</label><input id="aMemo" placeholder="선택"></div>
+    </div>
+    <div class="bar" style="margin:10px 0 0"><button class="pri" id="btnAAdd">계좌 추가</button></div>
+    <div class="note" style="margin-top:8px">· <b>일반 위탁</b>: 분배금에 원천징수(설정값)를 자동 적용하고, 금융소득종합과세·건보료 점검에 포함합니다.<br>
+    · <b>ISA</b>: 원천징수 없이 기록하고 ISA 납입 한도·비과세 점검 대상이 됩니다(만기 인출 시 과세는 별도 확인).<br>
+    · <b>연금·퇴직연금</b>(연금저축·IRP·DC 등): 과세이연 계좌라 원천징수를 자동 적용하지 않고 종합과세 점검에서 제외합니다(연금 수령 시 연금소득세는 별도).<br>
+    · 이름을 바꾸면 그 계좌의 모든 기록이 함께 바뀌고, 기록이 있는 계좌는 삭제할 수 없습니다.</div>
+  </div>
   <div id="holdTables"></div>
   <div class="card">
     <h2>예상 분배금 (인컴 자산) <span class="note">ETF와 ISA 계좌 종목이 나옵니다. 배당 주기·연간 예상 배당률(%)을 입력하면 평가금액 기준으로 계산합니다.</span></h2>
@@ -243,7 +257,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
   <div class="card">
     <h2>기초 보유 등록 <span class="note">처음 한 번, 지금 보유 중인 종목을 장부에 올립니다</span></h2>
     <p class="note" style="margin:0 0 8px">엑셀 보유주식 시트에서 행을 복사해 붙여넣으면 됩니다. 앞에서부터 <code>종목명 · (섹터) · 보유수량 · 매입단가 · 현재가</code> 순서로 읽고, 합계 줄과 머리글은 건너뜁니다. ISA 시트 행이면 <code>월배당 · 6.50%</code>처럼 붙은 배당 주기·연간 예상 배당률과 맨 끝의 절세·운용 가이드 문구도 읽습니다. 수수료·세금 없이 매입단가 그대로 평단이 됩니다.</p>
-    <div class="grid" style="margin-bottom:8px"><div><label>계좌</label><input id="iAcct" list="acctList" placeholder="종합위탁"></div><div><label>기준일</label><input type="date" id="iDate"></div></div>
+    <div class="grid" style="margin-bottom:8px"><div><label>계좌</label><select id="iAcct"></select></div><div><label>기준일</label><input type="date" id="iDate"></div></div>
     <textarea id="initPaste" placeholder="삼성전자	반도체	10	70,000	72,000"></textarea>
     <div class="bar" style="margin:10px 0 0"><button class="pri" id="btnInit">기초 보유로 등록</button></div>
     <div id="initOut"></div>
@@ -256,7 +270,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <h2 id="dTitle">받은 분배금 기록</h2>
     <div class="grid" id="dForm">
       <div><label>지급일</label><input type="date" id="dDate"></div>
-      <div><label>계좌</label><input id="dAcct" list="acctList" placeholder="중개형 ISA"></div>
+      <div><label>계좌</label><select id="dAcct"></select></div>
       <div><label>종목명</label><input id="dName" list="nameList"></div>
       <div><label>세전 분배금(원)</label><input type="number" id="dGross" min="0" step="any" inputmode="decimal"></div>
       <div><label>원천징수세(비우면 자동)</label><input type="number" id="dTax" min="0" step="any" inputmode="decimal"></div>
@@ -282,7 +296,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
   </div>
   <div class="card">
     <h2>분배금 붙여넣기</h2>
-    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-15 TIGER 배당ETF 12,345</code> — 금액 뒤에 원천징수세가 오면 함께 읽습니다. 줄 안에 <code>ISA</code>·<code>종합위탁</code>이 있으면 그 계좌, 없으면 위 입력창의 계좌로 들어갑니다.</p>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-15 TIGER 배당ETF 12,345</code> — 금액 뒤에 원천징수세가 오면 함께 읽습니다. 줄 안에 등록한 계좌 이름(또는 <code>위탁</code>·<code>ISA</code>)이 있으면 그 계좌, 없으면 위 입력창의 계좌로 들어갑니다.</p>
     <textarea id="dPaste" placeholder="2026-10-15	TIGER 배당ETF	12,345"></textarea>
     <div class="bar" style="margin:10px 0 0"><button id="btnDParse">미리보기</button><button class="pri" id="btnDApply">반영</button></div>
     <div id="dPasteOut"></div>
@@ -322,7 +336,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <h2 id="xTitle">입출금 기록 <span class="note">은행 ↔ 증권계좌 입금·출금 (계좌 간 이체는 한쪽 출금 + 다른 쪽 입금으로 두 건 기록)</span></h2>
     <div class="grid" id="xForm">
       <div><label>날짜</label><input type="date" id="xDate"></div>
-      <div><label>계좌</label><input id="xAcct" list="acctList" placeholder="종합위탁"></div>
+      <div><label>계좌</label><select id="xAcct"></select></div>
       <div><label>구분</label><select id="xType"><option value="in">입금</option><option value="out">출금</option></select></div>
       <div><label>금액(원)</label><input type="number" id="xAmt" min="0" step="any" inputmode="decimal"></div>
       <div style="grid-column:span 2"><label>메모</label><input id="xMemo" placeholder="예: ISA 납입, 생활비 출금"></div>
@@ -339,7 +353,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <p class="note" style="margin:0 0 8px">은행 앱·인터넷뱅킹 거래내역을 복사해 붙이면 됩니다. 한 줄에 한 건이며 아래 형식을 읽습니다.<br>
     ① <code>2026-10-05 입금 500,000 월급</code> (날짜·시각·잔액이 섞여 있어도 첫 금액을 거래액으로, 나머지 금액은 잔액으로 보고 무시)<br>
     ② 부호 금액: <code>2026.10.07 -50,000 카드대금</code> (− 출금, + 입금) ③ 엑셀 표: 머리글에 <b>출금</b>·<b>입금</b> 열이 있으면 열 위치로 읽습니다.<br>
-    줄 안에 <code>종합위탁</code>·<code>ISA</code>가 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 이미 기록한 내역과 같은 줄(날짜·계좌·구분·금액·메모)은 <b>중복으로 건너뜁니다</b>.</p>
+    줄 안에 등록한 계좌 이름(또는 <code>위탁</code>·<code>ISA</code>)이 있으면 그 계좌로, 없으면 위 입력창의 계좌로 들어갑니다. 이미 기록한 내역과 같은 줄(날짜·계좌·구분·금액·메모)은 <b>중복으로 건너뜁니다</b>.</p>
     <textarea id="xPaste" placeholder="2026-10-05	입금	500,000	월급 이체"></textarea>
     <div class="bar" style="margin:10px 0 0"><button id="btnXParse">미리보기</button><button class="pri" id="btnXApply">반영</button></div>
     <div id="xPasteOut"></div>
@@ -515,7 +529,9 @@ const fmtS=n=>(n>0?'+':'')+fmt(n);
 const cls=n=>n>0?'up':n<0?'dn':'';
 const pct=n=>(n>0?'+':'')+n.toFixed(2)+'%';
 const todayStr=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
-const ACCTS=['종합위탁','중개형 ISA'];
+const DEF_ACCTS=[{name:'종합위탁',type:'general',memo:''},{name:'중개형 ISA',type:'isa',memo:''}];
+const ACCT_TYPES={general:'일반 위탁(과세)',isa:'ISA',pension:'연금·퇴직연금'};
+const guessType=n=>/ISA/i.test(n||'')?'isa':/연금|IRP|퇴직/i.test(n||'')?'pension':'general';
 const NOACCT='(계좌 미지정)';
 const DEF_MACRO=[
   {item:'원/달러 환율',metric:'USD/KRW 추세',good:'1,320원 이하 안정세, 환율 하락',bad:'1,380원 이상 급등, 외국인 이탈 가속',guide:'환율 급등 시 레버리지 축소 및 현금비중 확대'},
@@ -531,18 +547,27 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],snaps:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:3000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:60,rtSaleYears:3,rtSaleNet:500000000,rtRent:0,rtYield:5,rtGrowth:0,rtSheltered:50000000,rtAssets:0,rtPenAge:65,rtPen:1000000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={accounts:DEF_ACCTS,alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],snaps:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:3000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:60,rtSaleYears:3,rtSaleNet:500000000,rtRent:0,rtYield:5,rtGrowth:0,rtSheltered:50000000,rtAssets:0,rtPenAge:65,rtPen:1000000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
 const pk=(a,n)=>(a||'')+'|'+n;
 const acctLabel=a=>a||NOACCT;
+const acctType=a=>{const r=(db.accounts||[]).find(x=>x.name===a);return r?r.type:guessType(a)};
+const acctFirst=t=>((db.accounts||[]).find(a=>a.type===t)||(db.accounts||[])[0]||{}).name||'';
 
 function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY));if(r&&Array.isArray(r.trades))return norm(r)}catch(e){}
   return JSON.parse(JSON.stringify(defaults));
 }
-function norm(r){return {...defaults,...r,macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},snaps:Array.isArray(r.snaps)?r.snaps:[],watch:Array.isArray(r.watch)?r.watch:[],watchAck:r.watchAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}}}
+function norm(r){return ensureAccts({...defaults,...r,accounts:Array.isArray(r.accounts)?r.accounts.filter(a=>a&&a.name).map(a=>({name:String(a.name),type:ACCT_TYPES[a.type]?a.type:guessType(a.name),memo:a.memo||''})):DEF_ACCTS.map(a=>({...a})),macro:Array.isArray(r.macro)?r.macro:JSON.parse(JSON.stringify(DEF_MACRO)),road:{...JSON.parse(JSON.stringify(DEF_ROAD)),...(r.road||{})},alertAck:r.alertAck||{},reviews:r.reviews||{},snaps:Array.isArray(r.snaps)?r.snaps:[],watch:Array.isArray(r.watch)?r.watch:[],watchAck:r.watchAck||{},memo:r.memo||'',pricesAt:r.pricesAt||'',divs:r.divs||[],flows:r.flows||[],prices:r.prices||{},meta:r.meta||{},cash:r.cash||{},settings:{...defaults.settings,...r.settings}})}
+// 기록에 쓰였지만 등록되지 않은 계좌 이름(예전 데이터·백업)을 자동 등록한다
+function ensureAccts(o){
+  const have=new Set(o.accounts.map(a=>a.name));
+  const add=n=>{if(n&&!have.has(n)){have.add(n);o.accounts.push({name:n,type:guessType(n),memo:''})}};
+  o.trades.forEach(t=>add(t.acct));o.divs.forEach(d=>add(d.acct));o.flows.forEach(f=>add(f.acct));Object.keys(o.cash).forEach(add);
+  return o;
+}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){flash('저장 실패: 브라우저 저장공간을 확인하세요. 백업 파일을 꼭 저장하세요.','warn')}
 }
@@ -640,15 +665,63 @@ function renderAlerts(c){
     const act=x.key==='stop'?'손절 원칙 점검':x.key==='target'?'익절 계획 점검':'';
     return `<div class="al"><span class="n">${k.icon} <b>${esc(x.name)}</b> <span class="note">(${x.accts.map(a=>esc(acctLabel(a))).join(', ')})</span> ${k.label} — ${msg}${act?` · ${act}`:''}${x.m.plan?` <span class="note">대응: ${esc(x.m.plan)}</span>`:''}</span><button class="sm" data-ack="${esc(x.name)}">확인</button></div>`}).join('')}<div class="note" style="margin-top:6px">"확인"하면 같은 상태에서는 다시 띄우지 않습니다(근접→도달·반대 방향이면 다시 알림). 종목별로 끄려면 보유 현황의 🔔 버튼을 누르세요.</div></div>`;
 }
+// 계좌 선택 목록(거래·분배금·입출금·기초 보유 입력칸): 등록한 계좌 + 계좌 없이 기록된 내역이 있으면 '(계좌 미지정)'
+function fillAcctSelects(){
+  const names=db.accounts.map(a=>a.name);
+  if(!names.length||db.trades.some(t=>!t.acct)||db.divs.some(d=>!d.acct)||db.flows.some(f=>!f.acct))names.push('');
+  const defs={fAcct:'general',iAcct:'general',xAcct:'general',dAcct:'isa'};
+  for(const id of Object.keys(defs)){
+    const el=$(id),cur=el.options.length?el.value:null;
+    const list=cur!==null&&!names.includes(cur)?[...names,cur]:names;
+    el.innerHTML=list.map(n=>`<option value="${esc(n)}">${esc(acctLabel(n))}</option>`).join('');
+    el.value=cur!==null?cur:acctFirst(defs[id]);
+  }
+}
+function setAcct(id,v){
+  const el=$(id);v=v||'';
+  if(![...el.options].some(o=>o.value===v))el.insertAdjacentHTML('beforeend',`<option value="${esc(v)}">${esc(acctLabel(v))}</option>`);
+  el.value=v;
+}
+const acctUse=n=>db.trades.filter(t=>t.acct===n).length+db.divs.filter(d=>d.acct===n).length+db.flows.filter(f=>f.acct===n).length+(db.cash[n]?1:0);
+function renderAcctMgr(){
+  $('acctMgr').innerHTML=db.accounts.length?`<table><tr><th class="l">계좌 이름</th><th class="l">종류</th><th class="l">메모</th><th>기록 수</th><th></th></tr>${db.accounts.map((a,i)=>{
+    const n=acctUse(a.name);
+    return `<tr><td class="l"><input class="am" data-ai="${i}" data-k="name" value="${esc(a.name)}" style="width:170px;text-align:left"></td><td class="l"><select class="am" data-ai="${i}" data-k="type" style="width:auto">${Object.entries(ACCT_TYPES).map(([k,v])=>`<option value="${k}"${a.type===k?' selected':''}>${v}</option>`).join('')}</select></td><td class="l"><input class="am" data-ai="${i}" data-k="memo" value="${esc(a.memo||'')}" style="width:170px;text-align:left"></td><td>${n}건</td><td><button class="sm" data-adel="${i}">삭제</button></td></tr>`}).join('')}</table>`:'<p class="note">등록된 계좌가 없습니다. 아래에서 계좌를 추가하세요.</p>';
+}
+function addAcct(){
+  const name=$('aName').value.trim(),type=$('aType').value,memo=$('aMemo').value.trim();
+  if(!name){flash('계좌 이름을 입력하세요','warn');return}
+  if(db.accounts.some(a=>a.name.toLowerCase()===name.toLowerCase())){flash(`이미 등록된 계좌입니다: ${name}`,'warn');return}
+  db.accounts.push({name,type,memo});save();$('aName').value='';$('aMemo').value='';render();
+  flash(`계좌 등록: ${name} (${ACCT_TYPES[type]})`);
+}
+function editAcct(i,k,v){
+  const a=db.accounts[i];if(!a)return;
+  if(k==='type'){a.type=v;save();render();flash(`${a.name}: 종류를 ${ACCT_TYPES[v]}(으)로 바꿨습니다. 앞으로 입력하는 분배금 세금 계산과 점검에 적용됩니다(이미 기록한 분배금의 세금은 그대로).`);return}
+  if(k==='memo'){a.memo=v.trim();save();return}
+  const nn=v.trim(),old=a.name;
+  if(nn===old)return;
+  if(!nn||db.accounts.some((x,j)=>j!==i&&x.name.toLowerCase()===nn.toLowerCase())){flash(!nn?'계좌 이름을 비울 수 없습니다':`이미 있는 계좌 이름입니다: ${nn}`,'warn');renderAcctMgr();return}
+  db.trades.forEach(t=>{if(t.acct===old)t.acct=nn});db.divs.forEach(d=>{if(d.acct===old)d.acct=nn});db.flows.forEach(f=>{if(f.acct===old)f.acct=nn});
+  if(old in db.cash){db.cash[nn]=db.cash[old];delete db.cash[old]}
+  a.name=nn;save();render();flash(`계좌 이름 변경: ${old} → ${nn} (기록 ${acctUse(nn)}건 함께 변경)`);
+}
+function delAcct(i){
+  const a=db.accounts[i];if(!a)return;
+  const n=acctUse(a.name);
+  if(n>0){flash(`${a.name}에는 기록 ${n}건(거래·분배금·입출금·예수금)이 있어 삭제할 수 없습니다. 기록을 정리하거나 이름만 바꾸세요.`,'warn');return}
+  if(!confirm(`계좌 '${a.name}'을(를) 삭제할까요?`))return;
+  db.accounts.splice(i,1);save();render();flash(`계좌 삭제: ${a.name}`);
+}
 function allAccts(c){
-  const s=new Set(ACCTS);
+  const s=new Set(db.accounts.map(a=>a.name));
   Object.values(c.pos).forEach(p=>s.add(p.acct));
   Object.keys(db.cash).forEach(a=>s.add(a));
   db.trades.forEach(t=>s.add(t.acct||''));
   return [...s];
 }
 // 예상 분배금: 평가금액(현재가 미입력이면 매입금액) x 연간 예상 배당률, 월 환산은 /12
-const isIsa=a=>/ISA/i.test(a||'');
+const isIsa=a=>acctType(a)==='isa';
 function incomeRows(c){
   return heldList(c).filter(p=>p.kind==='etf'||isIsa(p.acct)||(db.meta[p.name]||{}).yield>0).map(p=>{
     const m=db.meta[p.name]||{},px=db.prices[p.name];
@@ -662,7 +735,7 @@ function incomeTotals(rows){
   return {val,yearly,monthly:yearly/12,rate:val>0?yearly/val*100:0,isaYear};
 }
 // 금융소득종합과세·건보료 점검 (일반 과세 계좌의 분배금 + 직접 입력한 기타 금융소득. ISA·연금 계좌는 제외)
-const isTaxable=a=>!isIsa(a)&&!/연금|IRP|퇴직/i.test(a||'');
+const isTaxable=a=>acctType(a)==='general';
 function fiCalc(I){
   const s=db.settings,wh=I*s.divTax/100;
   const over=s.fiLimit>0?Math.max(0,I-s.fiLimit):0;
@@ -1048,7 +1121,7 @@ function acctSummary(c){
   for(const a of allAccts(c)){
     const hs=heldList(c).filter(p=>p.acct===a);
     const cash=db.cash[a]||0;
-    if(!hs.length&&!cash&&!ACCTS.includes(a))continue;
+    if(!hs.length&&!cash&&!db.accounts.some(x=>x.name===a))continue;
     let cost=0,val=0,miss=0;
     hs.forEach(p=>{cost+=p.cost;const px=db.prices[p.name];if(px>0)val+=px*p.qty;else{val+=p.cost;miss++}});
     out.push({acct:a,hs,cost,val,miss,cash,total:val+cash});
@@ -1095,7 +1168,7 @@ function clearForm(){
 }
 function editTrade(id){
   const t=db.trades.find(x=>x.id===id);if(!t)return;editId=id;
-  $('fDate').value=t.date;$('fAcct').value=t.acct||'';$('fSide').value=t.side;$('fType').value=t.type||'';$('fKind').value=t.kind;$('fName').value=t.name;
+  $('fDate').value=t.date;setAcct('fAcct',t.acct);$('fSide').value=t.side;$('fType').value=t.type||'';$('fKind').value=t.kind;$('fName').value=t.name;
   $('fQty').value=t.qty;$('fPrice').value=t.price;$('fStop').value=t.stop||'';$('fTarget').value=t.target||'';
   $('fFee').value=t.fee;$('fTax').value=t.tax;$('fReason').value=t.reason||'';$('fMemo').value=t.memo||'';$('fCash').checked=!!t.cash;
   $('formTitle').textContent='거래 수정';$('btnAdd').textContent='수정 저장';$('btnCancel').classList.remove('hide');
@@ -1180,20 +1253,27 @@ function checkForm(){
 
 // ---------- 붙여넣기 (체결내역) ----------
 const ETF_RE=/ETF|KODEX|TIGER|ACE|SOL|RISE|KBSTAR|HANARO|PLUS|ARIRANG/i;
+// 줄 안에 등록한 계좌 이름(긴 이름 우선)이나 '위탁'·'ISA'가 있으면 그 계좌로 읽고 그 부분을 지운다
+function pullAcct(line){
+  const low=line.toLowerCase(),names=db.accounts.map(a=>a.name).sort((a,b)=>b.length-a.length);
+  for(const n of names){const i=low.indexOf(n.toLowerCase());if(i>=0)return {acct:n,line:(line.slice(0,i)+' '+line.slice(i+n.length)).trim()}}
+  const al=[[/(^|[\s,\t])(종합)?위탁(?=$|[\s,\t])/,'general','종합위탁'],[/(^|[\s,\t])(중개형\s*)?ISA(?=$|[\s,\t])/i,'isa','중개형 ISA']];
+  for(const [re,t,def] of al){const m=line.match(re);if(m){const a=db.accounts.find(x=>x.type===t);return {acct:a?a.name:def,line:(line.replace(re,m[1]||' ')).trim()}}}
+  return {acct:null,line};
+}
 function parsePaste(text){
   const out=[],bad=[];
   const defAcct=$('fAcct').value.trim();
   for(const raw of text.split(/\r?\n/)){
-    const line=raw.trim();if(!line)continue;
+    const line0=raw.trim();if(!line0)continue;
+    const pa=pullAcct(line0),line=pa.line;
     const toks=(line.includes('\t')?line.split('\t'):line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s+/)).map(s=>s.trim()).filter(Boolean);
-    let date=null,side=null,acct=null,name=[],nums=[];
+    let date=null,side=null,acct=pa.acct,name=[],nums=[];
     for(const k of toks){
       const d=k.match(/^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/);
       if(d&&!date){date=`${d[1]}-${d[2].padStart(2,'0')}-${d[3].padStart(2,'0')}`;continue}
       if(/매수|buy/i.test(k)&&!side){side='buy';continue}
       if(/매도|sell/i.test(k)&&!side){side='sell';continue}
-      if(!acct&&/^종합위탁$|^위탁$/.test(k)){acct='종합위탁';continue}
-      if(!acct&&/^(중개형\s*)?ISA$/i.test(k)){acct='중개형 ISA';continue}
       const n=k.replace(/[,원주]/g,'');
       if(/^\d+(\.\d+)?$/.test(n)){nums.push(parseFloat(n));continue}
       name.push(k);
@@ -1271,7 +1351,7 @@ function applyInit(){
 
 // ---------- 받은 분배금 ----------
 let dEditId=null;
-const autoDivTax=(acct,gross)=>isIsa(acct)?0:Math.round(gross*db.settings.divTax/100);
+const autoDivTax=(acct,gross)=>acctType(acct)==='general'?Math.round(gross*db.settings.divTax/100):0;
 const dNet=d=>d.gross-d.tax;
 // 계좌 예수금에 금액을 더한다(음수면 뺀다). 반영과 되돌림이 정확히 대칭이 되도록 0 보정은 하지 않는다
 function addCash(acct,amount){
@@ -1336,7 +1416,7 @@ function addDiv(){
 }
 function editDiv(id){
   const d=db.divs.find(x=>x.id===id);if(!d)return;dEditId=id;
-  $('dDate').value=d.date;$('dAcct').value=d.acct||'';$('dName').value=d.name;$('dGross').value=d.gross;$('dTax').value=d.tax;$('dMemo').value=d.memo||'';
+  $('dDate').value=d.date;setAcct('dAcct',d.acct);$('dName').value=d.name;$('dGross').value=d.gross;$('dTax').value=d.tax;$('dMemo').value=d.memo||'';
   $('dCash').checked=!!d.cash;$('dRe').checked=false;$('dReRow').classList.add('hide');updateRePreview();
   $('dTitle').textContent='분배금 수정';$('btnDAdd').textContent='수정 저장';$('btnDCancel').classList.remove('hide');
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1361,14 +1441,13 @@ function toggleDivCash(id){
 function parseDivPaste(text){
   const out=[],bad=[],defAcct=$('dAcct').value.trim();
   for(const raw of text.split(/\r?\n/)){
-    const line=raw.trim();if(!line)continue;
+    const line0=raw.trim();if(!line0)continue;
+    const pa=pullAcct(line0),line=pa.line;
     const toks=(line.includes('\t')?line.split('\t'):line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s+/)).map(s=>s.trim()).filter(Boolean);
-    let date=null,acct=null,name=[],nums=[];
+    let date=null,acct=pa.acct,name=[],nums=[];
     for(const k of toks){
       const d=k.match(/^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/);
       if(d&&!date){date=`${d[1]}-${d[2].padStart(2,'0')}-${d[3].padStart(2,'0')}`;continue}
-      if(!acct&&/^종합위탁$|^위탁$/.test(k)){acct='종합위탁';continue}
-      if(!acct&&/^(중개형\s*)?ISA$/i.test(k)){acct='중개형 ISA';continue}
       if(/^(분배금|배당금|배당|입금)$/.test(k))continue;
       const n=k.replace(/[,원]/g,'');
       if(/^\d+(\.\d+)?$/.test(n)){nums.push(parseFloat(n));continue}
@@ -1452,7 +1531,7 @@ function addFlow(){
 }
 function editFlow(id){
   const f=db.flows.find(x=>x.id===id);if(!f)return;xEditId=id;
-  $('xDate').value=f.date;$('xAcct').value=f.acct||'';$('xType').value=f.type;$('xAmt').value=f.amount;$('xMemo').value=f.memo||'';$('xCash').checked=!!f.cash;
+  $('xDate').value=f.date;setAcct('xAcct',f.acct);$('xType').value=f.type;$('xAmt').value=f.amount;$('xMemo').value=f.memo||'';$('xCash').checked=!!f.cash;
   $('xTitle').firstChild.textContent='입출금 수정 ';$('btnXAdd').textContent='수정 저장';$('btnXCancel').classList.remove('hide');
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -1499,14 +1578,13 @@ function parseBankPaste(text){
       continue;
     }
     // 한 줄 형식
-    const toks=(line.includes('\t')?cells:line.includes(',')&&!/\d,\d{3}\b/.test(line)?line.split(','):line.split(/\s+/)).map(x=>x.trim()).filter(Boolean);
-    let date=null,acct=null,dir=null;const nums=[],memo=[];
+    const pb=pullAcct(line),L=pb.line;
+    const toks=(L.includes('\t')?L.split('\t'):L.includes(',')&&!/\d,\d{3}\b/.test(L)?L.split(','):L.split(/\s+/)).map(x=>x.trim()).filter(Boolean);
+    let date=null,acct=pb.acct,dir=null;const nums=[],memo=[];
     for(const k of toks){
       const d=!date&&bankDate(k.split(' ')[0]);
       if(d){date=d;if(k.includes(' ')){const rest=k.split(' ').slice(1).join(' ');if(rest&&!/^\d{1,2}:\d{2}(:\d{2})?$/.test(rest))memo.push(rest)}continue}
       if(/^\d{1,2}:\d{2}(:\d{2})?$/.test(k))continue; // 시각
-      if(!acct&&/^종합위탁$|^위탁$/.test(k)){acct='종합위탁';continue}
-      if(!acct&&/^(중개형\s*)?ISA$/i.test(k)){acct='중개형 ISA';continue}
       if(!dir&&/^(입금|입금액)$/.test(k)){dir='in';continue}
       if(!dir&&/^(출금|출금액)$/.test(k)){dir='out';continue}
       const n=numTok(k);if(n!==null){nums.push({n,signed:/^[-+]/.test(k.replace(/[,원]/g,''))});continue}
@@ -1811,7 +1889,7 @@ function tradeRows(list,c,full){
 function inp(id,val,align,ph){return `<input class="hin${align==='t'?' t':''}" data-id="${esc(id)}" ${align==='t'?'type="text"':'type="number" step="any"'} value="${esc(val||'')}"${ph?` placeholder="${esc(ph)}"`:''} style="width:${align==='t'?'220px':'105px'}">`}
 function acctTable(sums,tv,tc,tcash,edit){
   if(!sums.length)return '<p class="note">보유 종목이 없습니다. 보유 현황 탭의 "기초 보유 등록"으로 현재 보유분을 올리거나 매수 거래를 입력하세요.</p>';
-  return `<table><tr><th>계좌</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>${edit?'예수금(입력)':'예수금'}</th><th>계좌 총자산</th><th>자산 비중</th></tr>${sums.map(s=>`<tr><td class="l">${esc(acctLabel(s.acct))}${s.miss?` <span class="note">(현재가 미입력 ${s.miss})</span>`:''}</td><td>${fmt(s.cost)}</td><td>${fmt(s.val)}</td><td class="${cls(s.val-s.cost)}">${fmtS(s.val-s.cost)}</td><td class="${cls(s.val-s.cost)}">${s.cost>0?pct((s.val-s.cost)/s.cost*100):'-'}</td><td>${edit?`<input class="hin cash" data-id="cash|${esc(s.acct)}" type="number" step="any" value="${s.cash||''}" style="width:115px">`:fmt(s.cash)}</td><td>${fmt(s.total)}</td><td>${tv+tcash>0?(s.total/(tv+tcash)*100).toFixed(2)+'%':'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td>${fmt(tc)}</td><td>${fmt(tv)}</td><td class="${cls(tv-tc)}">${fmtS(tv-tc)}</td><td class="${cls(tv-tc)}">${tc>0?pct((tv-tc)/tc*100):'-'}</td><td>${fmt(tcash)}</td><td>${fmt(tv+tcash)}</td><td>100.00%</td></tr></table>`;
+  return `<table><tr><th>계좌</th><th>매입금액</th><th>평가금액</th><th>평가손익</th><th>수익률</th><th>${edit?'예수금(입력)':'예수금'}</th><th>계좌 총자산</th><th>자산 비중</th></tr>${sums.map(s=>`<tr><td class="l">${esc(acctLabel(s.acct))}${s.acct?` <span class="note">(${acctType(s.acct)==='isa'?'ISA':acctType(s.acct)==='pension'?'연금':'위탁'})</span>`:''}${s.miss?` <span class="note">(현재가 미입력 ${s.miss})</span>`:''}</td><td>${fmt(s.cost)}</td><td>${fmt(s.val)}</td><td class="${cls(s.val-s.cost)}">${fmtS(s.val-s.cost)}</td><td class="${cls(s.val-s.cost)}">${s.cost>0?pct((s.val-s.cost)/s.cost*100):'-'}</td><td>${edit?`<input class="hin cash" data-id="cash|${esc(s.acct)}" type="number" step="any" value="${s.cash||''}" style="width:115px">`:fmt(s.cash)}</td><td>${fmt(s.total)}</td><td>${tv+tcash>0?(s.total/(tv+tcash)*100).toFixed(2)+'%':'-'}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td>${fmt(tc)}</td><td>${fmt(tv)}</td><td class="${cls(tv-tc)}">${fmtS(tv-tc)}</td><td class="${cls(tv-tc)}">${tc>0?pct((tv-tc)/tc*100):'-'}</td><td>${fmt(tcash)}</td><td>${fmt(tv+tcash)}</td><td>100.00%</td></tr></table>`;
 }
 // ---------- 대시보드 ----------
 const CATS=['개별 주식','배당·일반 ETF','커버드콜 ETF'];
@@ -1990,7 +2068,7 @@ function render(){
   $('todayLabel').textContent=d;
   $('todayTable').innerHTML=tradeRows(c.sorted.filter(t=>t.date===d&&t.type!=='기초'),c,false);
   $('nameList').innerHTML=[...new Set(db.trades.map(t=>t.name))].map(n=>`<option value="${esc(n)}">`).join('');
-  $('acctList').innerHTML=allAccts(c).filter(Boolean).map(n=>`<option value="${esc(n)}">`).join('');
+  fillAcctSelects();renderAcctMgr(c);
   // 보유 현황
   const sums=acctSummary(c);
   let tc=0,tv=0,tcash=0;sums.forEach(s=>{tc+=s.cost;tv+=s.val;tcash+=s.cash});
@@ -2258,6 +2336,7 @@ $('btnDApply').onclick=applyDiv;
 $('btnDCsv').onclick=downloadDivCsv;
 $('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);flash('복사했습니다')}catch(e){flash('복사 실패: 직접 선택해서 복사하세요','warn')}};
 $('btnWAdd').onclick=addWatch;
+$('btnAAdd').onclick=addAcct;
 $('btnSnap').onclick=()=>{takeSnap();render();flash('오늘의 총자산을 기록했습니다')};
 $('snapRange').onchange=()=>render();
 $('btnBackup').onclick=()=>downloadBackup();
@@ -2270,6 +2349,7 @@ $('fileRestore').onchange=e=>{if(e.target.files[0])restore(e.target.files[0]);e.
 $('fDate').onchange=render;
 ['hFrom','hTo','hQ','hAcct'].forEach(i=>$(i).oninput=render);
 document.body.addEventListener('click',e=>{
+  if(e.target.dataset.adel!==undefined)delAcct(+e.target.dataset.adel);
   if(e.target.dataset.e)editTrade(e.target.dataset.e);
   if(e.target.dataset.d)delTrade(e.target.dataset.d);
   if(e.target.dataset.de)editDiv(e.target.dataset.de);
@@ -2293,6 +2373,7 @@ document.body.addEventListener('click',e=>{
 // 보유현황 표의 입력칸: 현재가·목표가·손절가·섹터·전략·예수금
 document.body.addEventListener('change',e=>{
   const el=e.target;
+  if(el.classList&&el.classList.contains('am')){editAcct(+el.dataset.ai,el.dataset.k,el.value);return}
   if(el.classList&&el.classList.contains('mi')){
     const m=db.macro[+el.dataset.i];
     // Tab으로 다음 칸에 넘어간 직후에는 포커스가 아직 옮겨지는 중이라, 자리 잡은 뒤에 다시 그린다
@@ -2342,7 +2423,7 @@ $('btnWipe').onclick=()=>{
   if(!confirm('모든 거래·설정이 삭제됩니다. 백업은 하셨나요?')||!confirm('정말 삭제할까요? 되돌릴 수 없습니다.'))return;
   db=JSON.parse(JSON.stringify(defaults));save();applySettings();render();flash('삭제했습니다');
 };
-$('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('dAcct').value=ACCTS[1];$('xDate').value=todayStr();$('xAcct').value=ACCTS[0];$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();checkForm();render();
+$('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('xDate').value=todayStr();applySettings();checkForm();render();
 loadDirHandle();
 // 웹 주소(https)로 열었을 때만 오프라인 캐시용 서비스 워커를 등록한다(파일로 직접 열 때는 쓰지 않음)
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
