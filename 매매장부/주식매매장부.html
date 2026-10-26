@@ -401,6 +401,15 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
   </div>
   <div class="card"><h2>월별 실현손익 (이동평균법, 비용 차감 후)</h2><div class="tw" id="pnlMonth"></div></div>
   <div class="card"><h2>종목별 실현손익</h2><div class="tw" id="pnlName"></div></div>
+  <div class="card">
+    <h2>🧾 연간 세무 자료 <span class="note">세무사·홈택스 신고 전에 한 해의 분배금·원천징수·실현손익·납입액을 계좌별로 모아 봅니다</span></h2>
+    <div class="grid" style="margin-bottom:8px;max-width:260px"><div><label>연도</label><select id="taxY"></select></div></div>
+    <div class="kpis" id="taxKpi"></div>
+    <div class="tw" id="taxAcct" style="margin-top:10px"></div>
+    <div class="tw" id="taxSell" style="margin-top:10px"></div>
+    <div class="note" id="taxNote" style="margin-top:8px"></div>
+    <div class="bar" style="margin:10px 0 0"><button id="btnTaxDiv">📊 분배금 내역 CSV</button><button id="btnTaxSell">📊 매도·실현손익 CSV</button></div>
+  </div>
 </section>
 
 <section id="t-rules" class="hide">
@@ -1052,6 +1061,62 @@ function trData(c){
   all.totRet=all.ext>0?all.total/all.ext*100:null;all.divContrib=all.ext>0?all.div/all.ext*100:null;
   const accts={};rows.forEach(r=>(accts[r.acct]||(accts[r.acct]=[])).push(r));
   return {rows,all,otherNet,otherGross,otherN,accts:Object.entries(accts).map(([a,rs])=>({acct:a,...mk(rs)})),noPrice:rows.filter(r=>r.noPrice).length};
+}
+// ---------- 연간 세무 자료 ----------
+const taxYears=()=>{
+  const s=new Set([todayStr().slice(0,4)]);
+  [...db.trades,...db.divs,...db.flows].forEach(x=>x.date&&s.add(x.date.slice(0,4)));
+  return [...s].sort().reverse();
+};
+function taxYearCalc(y,c){
+  const by={},A=n=>by[n]||(by[n]={acct:n,gross:0,wh:0,net:0,real:0,sellAmt:0,cost:0,inn:0,out:0,nSell:0});
+  const divs=db.divs.filter(d=>d.date.startsWith(y)).sort((a,b)=>a.date.localeCompare(b.date));
+  divs.forEach(d=>{const a=A(d.acct||'');a.gross+=d.gross;a.wh+=d.tax;a.net+=dNet(d)});
+  const yt=c.sorted.filter(t=>t.date.startsWith(y));
+  yt.forEach(t=>{A(t.acct||'').cost+=t.fee+t.tax});
+  const sells=yt.filter(t=>t.side==='sell').map(t=>{const r=c.rows[t.id];return {t,real:r.realized,basis:r.basis||0,amt:t.qty*t.price}});
+  sells.forEach(x=>{const a=A(x.t.acct||'');a.real+=x.real;a.sellAmt+=x.amt;a.nSell++});
+  db.flows.filter(f=>f.date.startsWith(y)).forEach(f=>{const a=A(f.acct||'');if(f.type==='in')a.inn+=f.amount;else a.out+=f.amount});
+  const order=db.accounts.map(a=>a.name),rank=n=>{const i=order.indexOf(n);return i<0?order.length:i};
+  const accts=Object.values(by).sort((a,b)=>rank(a.acct)-rank(b.acct)||a.acct.localeCompare(b.acct));
+  const tot=accts.reduce((t,a)=>{for(const k of ['gross','wh','net','real','sellAmt','cost','inn','out','nSell'])t[k]+=a[k];return t},{gross:0,wh:0,net:0,real:0,sellAmt:0,cost:0,inn:0,out:0,nSell:0});
+  // 종목별(계좌+종목) 매도 요약
+  const bs={};
+  sells.forEach(x=>{const k=pk(x.t.acct,x.t.name),o=bs[k]||(bs[k]={acct:x.t.acct||'',name:x.t.name,kind:x.t.kind,n:0,amt:0,basis:0,cost:0,real:0});
+    o.n++;o.amt+=x.amt;o.basis+=x.basis;o.cost+=x.t.fee+x.t.tax;o.real+=x.real});
+  const stocks=Object.values(bs).sort((a,b)=>b.real-a.real);
+  // 확인할 점
+  const taxG=sumBy(accts.filter(a=>isTaxable(a.acct)),a=>a.gross);
+  const etfGain=sumBy(sells.filter(x=>x.t.kind==='etf'&&isTaxable(x.t.acct)),x=>x.real);
+  const zeroWh=divs.filter(d=>isTaxable(d.acct)&&d.gross>0&&!(d.tax>0));
+  const inBy=t=>sumBy(accts.filter(a=>acctType(a.acct)===t),a=>a.inn);
+  return {y,divs,sells,accts,tot,stocks,taxG,etfGain,zeroWh,isaIn:inBy('isa'),penIn:inBy('pension')};
+}
+function renderTaxYear(c){
+  const keep=$('taxY').value,ys=taxYears();
+  $('taxY').innerHTML=ys.map(y=>`<option value="${y}">${y}년</option>`).join('');
+  $('taxY').value=ys.includes(keep)?keep:ys[0];
+  const d=taxYearCalc($('taxY').value,c),t=d.tot,s=db.settings;
+  $('taxKpi').innerHTML=[['분배금(세전)',fmt(t.gross)+'원',''],['원천징수세',fmt(t.wh)+'원',''],['분배금(실수령)',fmt(t.net)+'원',''],['실현손익(매매)',fmtS(t.real)+'원',cls(t.real)],['입금 합계',fmt(t.inn)+'원',''],['매매 수수료·세금',fmt(t.cost)+'원','']].map(([x,y,k])=>`<div class="kpi"><span>${x}</span><b class="${k}">${y}</b></div>`).join('');
+  $('taxAcct').innerHTML=d.accts.length?`<table><tr><th class="l">계좌</th><th class="l">종류</th><th>분배금(세전)</th><th>원천징수세</th><th>분배금(실수령)</th><th>매도 건수</th><th>실현손익</th><th>수수료·세금</th><th>입금</th><th>출금</th></tr>${d.accts.map(a=>`<tr><td class="l">${esc(acctLabel(a.acct))}</td><td class="l">${ACCT_TYPES[acctType(a.acct)]}</td><td>${fmt(a.gross)}</td><td>${fmt(a.wh)}</td><td>${fmt(a.net)}</td><td>${a.nSell}</td><td class="${cls(a.real)}">${fmtS(a.real)}</td><td>${fmt(a.cost)}</td><td>${fmt(a.inn)}</td><td>${fmt(a.out)}</td></tr>`).join('')}<tr><td class="l"><b>합계</b></td><td></td><td><b>${fmt(t.gross)}</b></td><td><b>${fmt(t.wh)}</b></td><td><b>${fmt(t.net)}</b></td><td><b>${t.nSell}</b></td><td class="${cls(t.real)}"><b>${fmtS(t.real)}</b></td><td><b>${fmt(t.cost)}</b></td><td><b>${fmt(t.inn)}</b></td><td><b>${fmt(t.out)}</b></td></tr></table>`:'<p class="note">이 해에 기록된 분배금·매매·입출금이 없습니다.</p>';
+  $('taxSell').innerHTML=d.stocks.length?`<table><tr><th class="l">종목(매도)</th><th class="l">계좌</th><th class="l">구분</th><th>매도 건수</th><th>매도금액</th><th>매도 원가</th><th>수수료·세금</th><th>실현손익</th></tr>${d.stocks.map(x=>`<tr><td class="l">${esc(x.name)}</td><td class="l">${esc(acctLabel(x.acct))}</td><td class="l">${x.kind==='etf'?'ETF':'주식'}</td><td>${x.n}</td><td>${fmt(x.amt)}</td><td>${fmt(x.basis)}</td><td>${fmt(x.cost)}</td><td class="${cls(x.real)}">${fmtS(x.real)}</td></tr>`).join('')}</table>`:'';
+  const L=[];
+  if(d.taxG>0)L.push(`일반 위탁 계좌 분배금(세전) <b>${fmt(d.taxG)}원</b>`+(s.fiLimit>0?` — 금융소득종합과세 기준 ${fmt(s.fiLimit)}원의 ${(d.taxG/s.fiLimit*100).toFixed(1)}%입니다. 다른 이자·배당(예금 이자 등)과 합산해 판단하세요(대시보드의 "금융소득종합과세·건보료 점검" 참고).`:'.'));
+  if(d.zeroWh.length)L.push(`⚠ 일반 위탁 계좌인데 원천징수세가 0원으로 기록된 분배금 <b>${d.zeroWh.length}건</b>(${esc(d.zeroWh.slice(0,3).map(x=>`${x.date} ${x.name}`).join(', '))}${d.zeroWh.length>3?' 등':''}) — 입력 누락인지 확인하세요.`);
+  if(d.etfGain>0)L.push(`일반 위탁 계좌의 ETF 매도 실현이익 <b>${fmtS(d.etfGain)}원</b>: 국내 상장 해외 주식형·채권형 ETF 등은 매매차익이 배당소득으로 과세되어 금융소득에 합산될 수 있습니다(국내 주식형 ETF·개별 주식 매매차익은 일반적으로 비과세). 이 장부는 ETF 종류를 구분하지 않으니 종목별로 확인하세요.`);
+  if(d.isaIn>0)L.push(`ISA 계좌 입금 <b>${fmt(d.isaIn)}원</b> (연 납입한도는 입출금 탭의 ISA 납입한도 추적 카드에서 점검)`);
+  if(d.penIn>0)L.push(`연금·퇴직연금 계좌 입금 <b>${fmt(d.penIn)}원</b> — 세액공제 한도·요건은 본인 소득과 해당 연도 규정을 확인하세요.`);
+  $('taxNote').innerHTML=(L.length?'· '+L.join('<br>· ')+'<br>':'')+'· 실현손익은 이동평균법·수수료와 세금 차감 후 값이고, 해외 주식·양도소득세 신고 대상(해외주식 직접 매매 등)은 이 장부가 다루지 않습니다. 참고용 정리이며 세액을 계산하거나 신고를 대신하지 않습니다.';
+}
+function downloadTaxCsv(kind){
+  const y=$('taxY').value,c=compute(),d=taxYearCalc(y,c);
+  if(kind==='div'){
+    saveCsv(`세무자료_분배금_${y}.csv`,['지급일','계좌','계좌 종류','종목명','세전 분배금(원)','원천징수세(원)','실수령(원)','메모'],d.divs.map(x=>[x.date,acctLabel(x.acct),ACCT_TYPES[acctType(x.acct)],x.name,x.gross,x.tax,dNet(x),x.memo||'']));
+    flash(`${y}년 분배금 ${d.divs.length}건을 CSV로 저장했습니다.`);
+  }else{
+    saveCsv(`세무자료_매도_${y}.csv`,['매도일','계좌','계좌 종류','종목명','구분','수량','단가(원)','매도금액(원)','매도 원가(원)','수수료(원)','거래세(원)','실현손익(원)'],d.sells.map(x=>[x.t.date,acctLabel(x.t.acct),ACCT_TYPES[acctType(x.t.acct)],x.t.name,x.t.kind==='etf'?'ETF':'주식',x.t.qty,x.t.price,Math.round(x.amt),Math.round(x.basis),x.t.fee,x.t.tax,Math.round(x.real)]));
+    flash(`${y}년 매도 ${d.sells.length}건을 CSV로 저장했습니다.`);
+  }
 }
 function renderTotalReturn(c){
   const d=trData(c),a=d.all,R=v=>v===null?'-':pct(v);
@@ -2096,6 +2161,7 @@ function render(){
   renderReview(c);
   renderPlan(c);
   renderTotalReturn(c);
+  renderTaxYear(c);
   renderIsa();
   renderSnaps();renderSnapList();
   renderDash(c);
@@ -2344,6 +2410,8 @@ $('btnZip').onclick=saveZip;$('btnHtmlSave').onclick=saveHtml;
 $('btnDirConnect').onclick=connectDir;$('btnDirOff').onclick=disconnectDir;$('btnDirRestore').onclick=restoreFromDir;$('btnShare').onclick=shareBackup;
 $('btnCsv').onclick=downloadCsv;
 $('btnCsvHold').onclick=downloadHoldCsv;
+$('btnTaxDiv').onclick=()=>downloadTaxCsv('div');$('btnTaxSell').onclick=()=>downloadTaxCsv('sell');
+$('taxY').onchange=()=>renderTaxYear(compute());
 $('btnRestore').onclick=()=>$('fileRestore').click();
 $('fileRestore').onchange=e=>{if(e.target.files[0])restore(e.target.files[0]);e.target.value=''};
 $('fDate').onchange=render;
@@ -2427,7 +2495,7 @@ $('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todaySt
 loadDirHandle();
 // 웹 주소(https)로 열었을 때만 오프라인 캐시용 서비스 워커를 등록한다(파일로 직접 열 때는 쓰지 않음)
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
-window.__ledger={compute,parsePaste,parseInit,get db(){return db}};
+window.__ledger={compute,parsePaste,parseInit,taxYearCalc,get db(){return db}};
 })();
 </script>
 </body>
