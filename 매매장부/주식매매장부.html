@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f5eff">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="매매장부">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>주식 매매 관리 장부</title>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--tx:#1d2330;--sub:#6b7380;--line:#e3e6eb;--pri:#1f5eff;--pri-tx:#fff;--up:#d6293a;--dn:#1e6bd6;--warn:#b26a00;--ok:#16794a}
@@ -238,7 +244,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <h2>기초 보유 등록 <span class="note">처음 한 번, 지금 보유 중인 종목을 장부에 올립니다</span></h2>
     <p class="note" style="margin:0 0 8px">엑셀 보유주식 시트에서 행을 복사해 붙여넣으면 됩니다. 앞에서부터 <code>종목명 · (섹터) · 보유수량 · 매입단가 · 현재가</code> 순서로 읽고, 합계 줄과 머리글은 건너뜁니다. ISA 시트 행이면 <code>월배당 · 6.50%</code>처럼 붙은 배당 주기·연간 예상 배당률과 맨 끝의 절세·운용 가이드 문구도 읽습니다. 수수료·세금 없이 매입단가 그대로 평단이 됩니다.</p>
     <div class="grid" style="margin-bottom:8px"><div><label>계좌</label><input id="iAcct" list="acctList" placeholder="종합위탁"></div><div><label>기준일</label><input type="date" id="iDate"></div></div>
-    <textarea id="initPaste" placeholder="현대차	자동차/모빌리티	50	490,588	353,500"></textarea>
+    <textarea id="initPaste" placeholder="삼성전자	반도체	10	70,000	72,000"></textarea>
     <div class="bar" style="margin:10px 0 0"><button class="pri" id="btnInit">기초 보유로 등록</button></div>
     <div id="initOut"></div>
   </div>
@@ -276,8 +282,8 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
   </div>
   <div class="card">
     <h2>분배금 붙여넣기</h2>
-    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-15 SOL 코리아고배당 28,269</code> — 금액 뒤에 원천징수세가 오면 함께 읽습니다. 줄 안에 <code>ISA</code>·<code>종합위탁</code>이 있으면 그 계좌, 없으면 위 입력창의 계좌로 들어갑니다.</p>
-    <textarea id="dPaste" placeholder="2026-10-15	SOL 코리아고배당	28,269"></textarea>
+    <p class="note" style="margin:0 0 8px">한 줄에 한 건. 예) <code>2026-10-15 TIGER 배당ETF 12,345</code> — 금액 뒤에 원천징수세가 오면 함께 읽습니다. 줄 안에 <code>ISA</code>·<code>종합위탁</code>이 있으면 그 계좌, 없으면 위 입력창의 계좌로 들어갑니다.</p>
+    <textarea id="dPaste" placeholder="2026-10-15	TIGER 배당ETF	12,345"></textarea>
     <div class="bar" style="margin:10px 0 0"><button id="btnDParse">미리보기</button><button class="pri" id="btnDApply">반영</button></div>
     <div id="dPasteOut"></div>
   </div>
@@ -479,7 +485,15 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <div class="grid" style="max-width:320px;margin-bottom:10px"><div><label>백업 알림 주기(일) — 0이면 알림 끔</label><input type="number" id="sBackupDays" step="any"></div></div>
     <p class="note">데이터는 이 브라우저 안에만 저장됩니다. 브라우저 기록 삭제·PC 교체 시 사라지므로 <b>백업 저장</b>(.json) 파일을 클라우드 폴더(OneDrive 등)에 두세요.</p>
     <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--tx)"><input type="checkbox" id="sAuto" style="width:auto"> 마감 시 백업 파일 자동 저장</label>
-    <div class="bar" style="margin:10px 0 0"><button class="del" id="btnWipe">전체 데이터 삭제</button></div>
+    <h3>백업 보관 위치 (구글 드라이브 연동)</h3>
+    <div class="bar" style="margin:0 0 8px">
+      <button id="btnDirConnect">📁 백업 폴더 연결</button>
+      <button id="btnDirRestore">📂 폴더의 최신 백업 불러오기</button>
+      <button id="btnDirOff" class="hide">연결 해제</button>
+      <button id="btnShare">📤 백업 공유 (휴대폰 → 드라이브)</button>
+    </div>
+    <div class="note" id="dirNote"></div>
+    <div class="bar" style="margin:14px 0 0"><button class="del" id="btnWipe">전체 데이터 삭제</button></div>
   </div>
 </section>
 </main>
@@ -511,7 +525,7 @@ const DEF_ROAD={
   tiny:{title:'정리 대상 극소량주',diag:'계좌 관리 비효율 및 잔고 분산 유발',act:'시장가 즉시 전량 매도하여 종목 수 압축'},
   income:{title:'인컴 자산 (ETF·ISA)',diag:'안정적 월배당 현금흐름 창출 중',act:'배당금 인출 없이 재투자(DRIP) 진행'}
 };
-const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],snaps:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:5000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:64,rtSaleYears:2,rtSaleNet:1000000000,rtRent:0,rtYield:6,rtGrowth:0,rtSheltered:100000000,rtAssets:0,rtPenAge:69,rtPen:2300000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
+const defaults={alertAck:{},macro:DEF_MACRO,road:DEF_ROAD,memo:'',pricesAt:'',trades:[],divs:[],flows:[],prices:{},meta:{},cash:{},closes:[],snaps:[],reviews:{},watch:[],watchAck:{},lastBackup:'',lastBackupN:0,backupSnooze:'',settings:{backupDays:7,fee:0.015,taxStock:0.20,taxEtf:0,auto:true,isaLimit:2000000,isaTax:9.9,divTax:15.4,ccLimit:30,riskPct:2,rrMin:2,lossDeep:-30,tinyW:0.1,nearPct:3,fiLimit:20000000,hiLimit:10000000,hiRate:7.19,ltcRate:13.14,margTax:26.4,goalMonthly:3000000,otherMonthly:0,isaOpen:'',isaYearCap:20000000,isaTotalCap:100000000,isaTerm:3,isaPaidBefore:0,isaPaidBeforeY:0,rtAge:60,rtSaleYears:3,rtSaleNet:500000000,rtRent:0,rtYield:5,rtGrowth:0,rtSheltered:50000000,rtAssets:0,rtPenAge:65,rtPen:1000000,rtYears:20,rtPenRatio:50,rbCore:60,rbIncome:30,rbBuffer:10,rbBand:5,rbNew:0,fiOther:0,fiAsset:0,fiYield:0}};
 const RT_IDS=['rtAge','rtSaleYears','rtSaleNet','rtAssets','rtRent','rtYield','rtGrowth','rtSheltered','rtPenAge','rtPen','rtPenRatio','rtYears'];
 let db=load();
 let editId=null;
@@ -2028,10 +2042,73 @@ function download(name,mime,body){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 const recCount=()=>db.trades.length+db.divs.length+db.flows.length;
-function downloadBackup(quiet){
+// 백업 폴더(크롬·엣지의 폴더 연결 기능): 연결해 두면 백업을 다운로드 대신 그 폴더에 바로 저장한다
+let dirHandle=null;
+const BK_RE=/^매매장부_백업_(\d{4}-\d{2}-\d{2})\.json$/;
+const idbOpen=()=>new Promise((res,rej)=>{const r=indexedDB.open('stockLedgerFS',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const idbGet=async k=>{const d=await idbOpen();return new Promise((res,rej)=>{const q=d.transaction('h').objectStore('h').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})};
+const idbSet=async(k,v)=>{const d=await idbOpen();return new Promise((res,rej)=>{const t=d.transaction('h','readwrite');v===null?t.objectStore('h').delete(k):t.objectStore('h').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})};
+async function dirPerm(h,ask){
+  if(typeof h.queryPermission!=='function')return true;
+  const o={mode:'readwrite'};
+  if(await h.queryPermission(o)==='granted')return true;
+  return !!ask&&await h.requestPermission(o)==='granted';
+}
+function renderDirNote(){
+  const sup=typeof window.showDirectoryPicker==='function';
+  $('btnDirConnect').classList.toggle('hide',!sup);$('btnDirRestore').classList.toggle('hide',!sup||!dirHandle);$('btnDirOff').classList.toggle('hide',!dirHandle);
+  $('dirNote').innerHTML=sup?(dirHandle?`✅ 연결됨: <b>${esc(dirHandle.name)}</b> — 💾 백업 저장과 오늘 마감의 자동 백업이 이 폴더에 바로 저장됩니다(같은 날은 같은 파일에 덮어씀). 브라우저를 다시 열면 첫 저장 때 권한을 한 번 물을 수 있습니다.`:'연결 안 됨. <b>Google Drive for desktop</b>을 PC에 설치해 두었다면 동기화되는 <b>내 드라이브 > 주식매매</b> 폴더를 고르세요. 그러면 백업이 구글 드라이브에 자동으로 쌓입니다.')
+    :'이 브라우저는 폴더 연결을 지원하지 않습니다(PC의 크롬·엣지에서만 가능). 휴대폰·사파리·파이어폭스에서는 <b>📤 백업 공유</b>로 드라이브 앱에 저장하거나 일반 다운로드를 쓰세요.';
+}
+async function loadDirHandle(){try{dirHandle=await idbGet('backupDir')||null}catch(e){dirHandle=null}renderDirNote()}
+async function connectDir(){
+  if(typeof window.showDirectoryPicker!=='function')return renderDirNote();
+  try{const h=await window.showDirectoryPicker({id:'ledger-backup',mode:'readwrite'});dirHandle=h;await idbSet('backupDir',h);renderDirNote();flash(`백업 폴더를 연결했습니다: ${h.name}`)}
+  catch(e){if(e&&e.name!=='AbortError')flash('폴더를 연결하지 못했습니다: '+e.message,'warn')}
+}
+async function disconnectDir(){dirHandle=null;try{await idbSet('backupDir',null)}catch(e){}renderDirNote();flash('백업 폴더 연결을 해제했습니다. 이제 백업은 일반 다운로드로 저장됩니다.')}
+async function latestBackupInDir(){
+  let best=null;
+  for await(const [name,h] of dirHandle.entries()){const m=BK_RE.exec(name);if(m&&h.kind==='file'&&(!best||name>best.name))best={name,h}}
+  return best;
+}
+async function restoreFromDir(){
+  if(!dirHandle)return;
+  try{
+    if(!await dirPerm(dirHandle,true))return flash('폴더 접근 권한이 없습니다. 다시 시도해 권한을 허용하세요.','warn');
+    const b=await latestBackupInDir();
+    if(!b)return flash('연결한 폴더에 매매장부_백업_날짜.json 파일이 없습니다.','warn');
+    restore(await b.h.getFile(),b.name);
+  }catch(e){flash('폴더에서 백업을 읽지 못했습니다: '+e.message,'warn')}
+}
+async function downloadBackup(quiet){
   db.lastBackup=todayStr();db.lastBackupN=recCount();db.backupSnooze='';save();
-  download(`매매장부_백업_${todayStr()}.json`,'application/json',JSON.stringify(db,null,1));
+  const name=`매매장부_백업_${todayStr()}.json`,body=JSON.stringify(db,null,1);
+  if(dirHandle){
+    try{
+      if(await dirPerm(dirHandle,true)){
+        const w=await (await dirHandle.getFileHandle(name,{create:true})).createWritable();await w.write(body);await w.close();
+        if(!quiet)flash(`백업을 "${dirHandle.name}" 폴더에 저장했습니다: ${name}`);
+        return 'dir';
+      }
+    }catch(e){}
+    flash('백업 폴더에 쓰지 못해 일반 다운로드로 저장했습니다. (폴더 권한을 확인하세요)','warn');
+  }
+  download(name,'application/json',body);
   if(!quiet)flash('백업 파일을 저장했습니다. 클라우드 폴더에 보관하세요.');
+  return 'download';
+}
+// 휴대폰 등: 공유 시트로 보내 구글 드라이브 앱의 "주식매매" 폴더에 저장
+async function shareBackup(){
+  db.lastBackup=todayStr();db.lastBackupN=recCount();db.backupSnooze='';save();
+  const name=`매매장부_백업_${todayStr()}.json`,file=new File([JSON.stringify(db,null,1)],name,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:'매매장부 백업'});flash('공유 화면에서 구글 드라이브의 "주식매매" 폴더를 골라 저장하세요.');return 'share'}
+    catch(e){if(e&&e.name==='AbortError'){flash('공유를 취소했습니다. (백업 기록은 남아 있지만 파일은 저장되지 않았을 수 있습니다)','warn');return 'cancel'}}
+  }
+  download(name,'application/json',JSON.stringify(db,null,1));
+  flash('이 브라우저는 공유 기능을 지원하지 않아 파일로 내려받았습니다. 다운로드한 파일을 드라이브 앱으로 올리세요.','warn');
+  return 'download';
 }
 function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function saveCsv(name,head,rows){
@@ -2059,12 +2136,12 @@ function downloadHoldCsv(){
   saveCsv(`보유현황_${todayStr()}.csv`,['계좌','종목명','섹터 / 업종','보유수량','매입단가(원)','현재가(원)','매입금액(원)','평가금액(원)','평가손익(원)','수익률(%)','계좌 비중(%)','1차 목표가(원)','손절 기준가(원)','스윙 대응 전략과 포지션 상태','배당 주기','연간 예상 배당률(%)','예상 월 분배금(원)','예상 연 배당금(원)','절세 및 운용 가이드'],rows);
   flash('엑셀 보유주식 열 순서로 CSV를 저장했습니다.');
 }
-function restore(file){
+function restore(file,label){
   const fr=new FileReader();
   fr.onload=()=>{
     try{
       const r=JSON.parse(fr.result);if(!Array.isArray(r.trades))throw 0;
-      if(!confirm(`백업의 거래 ${r.trades.length}건으로 현재 장부(${db.trades.length}건)를 덮어씁니다. 진행할까요?`))return;
+      if(!confirm(`${label?`[${label}] `:''}백업의 거래 ${r.trades.length}건으로 현재 장부(${db.trades.length}건)를 덮어씁니다. 진행할까요?`))return;
       db=norm(r);save();applySettings();render();flash('백업을 불러왔습니다');
     }catch(e){flash('백업 파일 형식이 올바르지 않습니다','warn')}
   };fr.readAsText(file);
@@ -2135,6 +2212,7 @@ $('btnWAdd').onclick=addWatch;
 $('btnSnap').onclick=()=>{takeSnap();render();flash('오늘의 총자산을 기록했습니다')};
 $('snapRange').onchange=()=>render();
 $('btnBackup').onclick=()=>downloadBackup();
+$('btnDirConnect').onclick=connectDir;$('btnDirOff').onclick=disconnectDir;$('btnDirRestore').onclick=restoreFromDir;$('btnShare').onclick=shareBackup;
 $('btnCsv').onclick=downloadCsv;
 $('btnCsvHold').onclick=downloadHoldCsv;
 $('btnRestore').onclick=()=>$('fileRestore').click();
@@ -2215,6 +2293,9 @@ $('btnWipe').onclick=()=>{
   db=JSON.parse(JSON.stringify(defaults));save();applySettings();render();flash('삭제했습니다');
 };
 $('fDate').value=todayStr();$('iDate').value=todayStr();$('dDate').value=todayStr();$('dAcct').value=ACCTS[1];$('xDate').value=todayStr();$('xAcct').value=ACCTS[0];$('fAcct').value=ACCTS[0];$('iAcct').value=ACCTS[0];applySettings();checkForm();render();
+loadDirHandle();
+// 웹 주소(https)로 열었을 때만 오프라인 캐시용 서비스 워커를 등록한다(파일로 직접 열 때는 쓰지 않음)
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 window.__ledger={compute,parsePaste,parseInit,get db(){return db}};
 })();
 </script>
