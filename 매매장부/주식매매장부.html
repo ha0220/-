@@ -310,7 +310,7 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
       <div><label>의무 가입기간(년)</label><input type="number" id="isaTerm" step="any"></div>
     </div>
     <div class="kpis" id="isaKpi"></div>
-    <div id="isaOut" style="margin-top:10px"></div>
+    <div class="tw" id="isaOut" style="margin-top:10px"></div>
   </div>
   <div class="card">
     <h2 id="xTitle">입출금 기록 <span class="note">은행 ↔ 증권계좌 입금·출금 (계좌 간 이체는 한쪽 출금 + 다른 쪽 입금으로 두 건 기록)</span></h2>
@@ -954,7 +954,7 @@ function trData(c){
   }).sort((a,b)=>b.total-a.total);
   const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
   const mk=a=>{const ext=sum(a,x=>x.ext),div=sum(a,x=>x.divNet),total=sum(a,x=>x.total),cost=sum(a,x=>x.cost),unreal=sum(a,x=>x.unreal);
-    return {ext,div,total,cost,unreal,real:sum(a,x=>x.real),totRet:ext>0?total/ext*100:null,priceRet:cost>0?unreal/cost*100:null,divContrib:ext>0?div/ext*100:null}};
+    return {ext,div,divNet:div,total,cost,unreal,real:sum(a,x=>x.real),totRet:ext>0?total/ext*100:null,priceRet:cost>0?unreal/cost*100:null,divContrib:ext>0?div/ext*100:null}};
   const all=mk(rows);all.total+=otherNet;all.div+=otherNet;
   all.totRet=all.ext>0?all.total/all.ext*100:null;all.divContrib=all.ext>0?all.div/all.ext*100:null;
   const accts={};rows.forEach(r=>(accts[r.acct]||(accts[r.acct]=[])).push(r));
