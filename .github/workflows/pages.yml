@@ -1,0 +1,46 @@
+# 매매장부(휴대폰용 웹 주소)를 gh-pages 브랜치에 올린다.
+# 장부 데이터는 올라가지 않는다(각자 브라우저에만 저장). 프로그램 파일만 게시된다.
+# 처음 한 번: 저장소 Settings > Pages > Source를 "Deploy from a branch", Branch를 gh-pages / (root)로 지정.
+name: 매매장부 웹 주소 게시
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '매매장부/주식매매장부.html'
+      - '매매장부/manifest.webmanifest'
+      - '매매장부/sw.js'
+      - '매매장부/icon.svg'
+      - '매매장부/icon-192.png'
+      - '매매장부/icon-512.png'
+      - '매매장부/apple-touch-icon.png'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ledger-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 사이트 폴더 만들기
+        run: |
+          mkdir site
+          cp "매매장부/주식매매장부.html" site/index.html
+          cp 매매장부/manifest.webmanifest 매매장부/sw.js 매매장부/icon.svg 매매장부/icon-192.png 매매장부/icon-512.png 매매장부/apple-touch-icon.png site/
+          touch site/.nojekyll
+      - name: gh-pages 브랜치에 게시
+        run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "매매장부 게시 ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
