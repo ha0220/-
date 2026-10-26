@@ -1,0 +1,72 @@
+name: 매매장부 PC 실행 프로그램 만들기
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '매매장부/주식매매장부.html'
+      - '매매장부/desktop/**'
+      - '.github/workflows/desktop.yml'
+  pull_request:
+    paths:
+      - '매매장부/desktop/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: 매매장부/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: 매매장부/desktop/package-lock.json
+      - name: 설치
+        run: npm ci
+      - name: 실행 파일 만들기 (portable exe)
+        run: npm run dist
+      - name: 만들어진 프로그램 자체 점검
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'selftest.json'
+          $p = Start-Process -FilePath 'dist/win-unpacked/StockLedger.exe' -ArgumentList '--selftest',"--selftest-out=$out" -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw '자체 점검 시간 초과' }
+          if (Test-Path $out) { Get-Content $out -Raw }
+          if ($p.ExitCode -ne 0) { throw "자체 점검 실패 (종료 코드 $($p.ExitCode))" }
+      - name: 만들어진 파일 확인
+        shell: pwsh
+        run: |
+          $f = Get-Item 'dist/StockLedger-Portable.exe'
+          "{0} {1:N1} MB" -f $f.Name, ($f.Length / 1MB)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockLedger-Portable
+          path: 매매장부/desktop/dist/StockLedger-Portable.exe
+          retention-days: 14
+      - name: 내려받기 페이지(Release)에 올리기
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $tag = 'desktop-latest'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title '매매장부 PC용 프로그램 (최신)' --notes 'StockLedger-Portable.exe 를 내려받아 더블클릭하면 실행됩니다. 설치가 필요 없습니다. 서명이 없는 프로그램이라 처음 실행할 때 Windows가 경고를 띄울 수 있습니다. (추가 정보 → 실행)'
+            if ($LASTEXITCODE -ne 0) { throw 'release 생성 실패' }
+          }
+          gh release upload $tag dist/StockLedger-Portable.exe --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'release 업로드 실패' }

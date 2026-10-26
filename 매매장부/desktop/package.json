@@ -1,0 +1,28 @@
+{
+  "name": "stock-ledger-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "주식 매매 관리 장부 (PC 단독 실행 프로그램)",
+  "author": "ha0220",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "prep": "node prep.js",
+    "start": "node prep.js && electron .",
+    "selftest": "node prep.js && electron . --selftest",
+    "dist": "node prep.js && electron-builder --win portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "app.stockledger.desktop",
+    "productName": "StockLedger",
+    "executableName": "StockLedger",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "web/**/*", "build/icon.png"],
+    "win": { "target": ["portable"], "icon": "build/icon.png" },
+    "portable": { "artifactName": "StockLedger-Portable.exe" }
+  }
+}
