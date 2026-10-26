@@ -14,6 +14,7 @@ on:
       - '매매장부/icon-192.png'
       - '매매장부/icon-512.png'
       - '매매장부/apple-touch-icon.png'
+      - '매매장부/PC용/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -35,6 +36,14 @@ jobs:
           cp "매매장부/주식매매장부.html" site/index.html
           cp 매매장부/manifest.webmanifest 매매장부/sw.js 매매장부/icon.svg 매매장부/icon-192.png 매매장부/icon-512.png 매매장부/apple-touch-icon.png site/
           touch site/.nojekyll
+      - name: PC용 압축파일 만들기
+        run: |
+          mkdir pc
+          cp "매매장부/주식매매장부.html" pc/StockLedger.html
+          cp 매매장부/PC용/* pc/
+          chmod +x pc/Open_Ledger_Mac.command
+          (cd pc && zip -X -q ../site/ledger-pc.zip StockLedger.html Open_Ledger_Windows.bat Open_Ledger_Mac.command README.txt)
+          unzip -l site/ledger-pc.zip
       - name: gh-pages 브랜치에 게시
         run: |
           cd site

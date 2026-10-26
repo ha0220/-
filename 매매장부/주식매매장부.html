@@ -481,6 +481,12 @@ KODEX 미국배당커버드콜액티브	12,340"></textarea>
     <div class="tw" id="chkOut"></div>
   </div>
   <div class="card">
+    <h2>💻 PC용 실행 파일 내려받기</h2>
+    <p class="note" style="margin:0 0 10px">설치 없이 쓰는 PC용 묶음입니다. 압축을 풀어 <b>Open_Ledger_Windows.bat</b>(Mac은 <b>Open_Ledger_Mac.command</b>)을 더블클릭하면 크롬·엣지로 장부가 열립니다. 이 화면을 <b>웹 주소</b>로 열었을 때 받을 수 있습니다.</p>
+    <div class="bar" style="margin:0 0 8px"><button class="pri" id="btnZip">📦 PC용 압축파일 받기 (.zip)</button><button id="btnHtmlSave">📄 장부 파일만 저장 (.html)</button></div>
+    <div class="note">데이터는 내려받는 파일에 들어 있지 않습니다. 옮기려면 <b>백업 저장 → 새 곳에서 백업 불러오기</b>를 하세요.</div>
+  </div>
+  <div class="card">
     <h2>데이터 관리</h2>
     <div class="grid" style="max-width:320px;margin-bottom:10px"><div><label>백업 알림 주기(일) — 0이면 알림 끔</label><input type="number" id="sBackupDays" step="any"></div></div>
     <p class="note">데이터는 이 브라우저 안에만 저장됩니다. 브라우저 기록 삭제·PC 교체 시 사라지므로 <b>백업 저장</b>(.json) 파일을 클라우드 폴더(OneDrive 등)에 두세요.</p>
@@ -2081,6 +2087,20 @@ async function restoreFromDir(){
     restore(await b.h.getFile(),b.name);
   }catch(e){flash('폴더에서 백업을 읽지 못했습니다: '+e.message,'warn')}
 }
+const isWeb=()=>/^https?:$/.test(location.protocol);
+function saveZip(){
+  if(!isWeb())return flash('PC용 압축파일은 웹 주소로 연 화면에서 받을 수 있습니다. 지금은 파일로 직접 열어 쓰는 중이라 이 파일이 곧 장부 파일입니다.','warn');
+  const a=document.createElement('a');a.href='ledger-pc.zip';a.download='매매장부_PC용.zip';document.body.appendChild(a);a.click();a.remove();
+  flash('PC용 압축파일을 내려받습니다. 압축을 풀고 Open_Ledger_Windows.bat(Mac은 Open_Ledger_Mac.command)을 실행하세요.');
+}
+async function saveHtml(){
+  if(!isWeb())return flash('웹 주소로 연 화면에서만 쓸 수 있습니다. 지금 쓰는 파일이 곧 장부 파일입니다.','warn');
+  try{
+    const r=await fetch(location.href.split('#')[0].split('?')[0],{cache:'no-cache'});if(!r.ok)throw 0;
+    download('주식매매장부.html','text/html;charset=utf-8',await r.text());
+    flash('장부 파일을 저장했습니다. 크롬·엣지로 이 파일을 열면 됩니다.');
+  }catch(e){flash('장부 파일을 내려받지 못했습니다. 인터넷 연결을 확인하세요.','warn')}
+}
 async function downloadBackup(quiet){
   db.lastBackup=todayStr();db.lastBackupN=recCount();db.backupSnooze='';save();
   const name=`매매장부_백업_${todayStr()}.json`,body=JSON.stringify(db,null,1);
@@ -2212,6 +2232,7 @@ $('btnWAdd').onclick=addWatch;
 $('btnSnap').onclick=()=>{takeSnap();render();flash('오늘의 총자산을 기록했습니다')};
 $('snapRange').onchange=()=>render();
 $('btnBackup').onclick=()=>downloadBackup();
+$('btnZip').onclick=saveZip;$('btnHtmlSave').onclick=saveHtml;
 $('btnDirConnect').onclick=connectDir;$('btnDirOff').onclick=disconnectDir;$('btnDirRestore').onclick=restoreFromDir;$('btnShare').onclick=shareBackup;
 $('btnCsv').onclick=downloadCsv;
 $('btnCsvHold').onclick=downloadHoldCsv;
