@@ -2049,7 +2049,11 @@ function download(name,mime,body){
 }
 const recCount=()=>db.trades.length+db.divs.length+db.flows.length;
 // 백업 폴더(크롬·엣지의 폴더 연결 기능): 연결해 두면 백업을 다운로드 대신 그 폴더에 바로 저장한다
-let dirHandle=null;
+let dirHandle=null,nativeDir='';
+// PC 전용 프로그램(Electron)에서는 preload가 window.ledgerNative를 제공한다: 폴더 경로를 직접 저장하므로 권한 확인 없이 쓴다
+const NATIVE=(typeof window.ledgerNative==='object'&&window.ledgerNative)||null;
+const dirOn=()=>NATIVE?!!nativeDir:!!dirHandle;
+const dirLabel=()=>NATIVE?nativeDir:(dirHandle?dirHandle.name:'');
 const BK_RE=/^매매장부_백업_(\d{4}-\d{2}-\d{2})\.json$/;
 const idbOpen=()=>new Promise((res,rej)=>{const r=indexedDB.open('stockLedgerFS',1);r.onupgradeneeded=()=>r.result.createObjectStore('h');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const idbGet=async k=>{const d=await idbOpen();return new Promise((res,rej)=>{const q=d.transaction('h').objectStore('h').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})};
@@ -2061,26 +2065,43 @@ async function dirPerm(h,ask){
   return !!ask&&await h.requestPermission(o)==='granted';
 }
 function renderDirNote(){
-  const sup=typeof window.showDirectoryPicker==='function';
-  $('btnDirConnect').classList.toggle('hide',!sup);$('btnDirRestore').classList.toggle('hide',!sup||!dirHandle);$('btnDirOff').classList.toggle('hide',!dirHandle);
-  $('dirNote').innerHTML=sup?(dirHandle?`✅ 연결됨: <b>${esc(dirHandle.name)}</b> — 💾 백업 저장과 오늘 마감의 자동 백업이 이 폴더에 바로 저장됩니다(같은 날은 같은 파일에 덮어씀). 브라우저를 다시 열면 첫 저장 때 권한을 한 번 물을 수 있습니다.`:'연결 안 됨. <b>Google Drive for desktop</b>을 PC에 설치해 두었다면 동기화되는 <b>내 드라이브 > 주식매매</b> 폴더를 고르세요. 그러면 백업이 구글 드라이브에 자동으로 쌓입니다.')
+  const sup=!!NATIVE||typeof window.showDirectoryPicker==='function',on=dirOn();
+  $('btnDirConnect').classList.toggle('hide',!sup);$('btnDirRestore').classList.toggle('hide',!sup||!on);$('btnDirOff').classList.toggle('hide',!on);
+  $('dirNote').innerHTML=sup?(on?(NATIVE?`✅ 연결됨: <b>${esc(nativeDir)}</b> — 💾 백업 저장과 오늘 마감의 자동 백업이 이 폴더에 바로 저장됩니다(같은 날은 같은 파일에 덮어씀).`:`✅ 연결됨: <b>${esc(dirLabel())}</b> — 💾 백업 저장과 오늘 마감의 자동 백업이 이 폴더에 바로 저장됩니다(같은 날은 같은 파일에 덮어씀). 브라우저를 다시 열면 첫 저장 때 권한을 한 번 물을 수 있습니다.`):'연결 안 됨. <b>Google Drive for desktop</b>을 PC에 설치해 두었다면 동기화되는 <b>내 드라이브 > 주식매매</b> 폴더를 고르세요. 그러면 백업이 구글 드라이브에 자동으로 쌓입니다.')
     :'이 브라우저는 폴더 연결을 지원하지 않습니다(PC의 크롬·엣지에서만 가능). 휴대폰·사파리·파이어폭스에서는 <b>📤 백업 공유</b>로 드라이브 앱에 저장하거나 일반 다운로드를 쓰세요.';
 }
-async function loadDirHandle(){try{dirHandle=await idbGet('backupDir')||null}catch(e){dirHandle=null}renderDirNote()}
+async function loadDirHandle(){
+  if(NATIVE){try{nativeDir=(await NATIVE.getDir())||''}catch(e){nativeDir=''}}
+  else{try{dirHandle=await idbGet('backupDir')||null}catch(e){dirHandle=null}}
+  renderDirNote();
+}
 async function connectDir(){
+  if(NATIVE){
+    try{const d=await NATIVE.pickDir();if(d){nativeDir=d;renderDirNote();flash(`백업 폴더를 연결했습니다: ${d}`)}}
+    catch(e){flash('폴더를 연결하지 못했습니다: '+e.message,'warn')}
+    return;
+  }
   if(typeof window.showDirectoryPicker!=='function')return renderDirNote();
   try{const h=await window.showDirectoryPicker({id:'ledger-backup',mode:'readwrite'});dirHandle=h;await idbSet('backupDir',h);renderDirNote();flash(`백업 폴더를 연결했습니다: ${h.name}`)}
   catch(e){if(e&&e.name!=='AbortError')flash('폴더를 연결하지 못했습니다: '+e.message,'warn')}
 }
-async function disconnectDir(){dirHandle=null;try{await idbSet('backupDir',null)}catch(e){}renderDirNote();flash('백업 폴더 연결을 해제했습니다. 이제 백업은 일반 다운로드로 저장됩니다.')}
+async function disconnectDir(){
+  if(NATIVE){try{await NATIVE.clearDir()}catch(e){}nativeDir=''}
+  else{dirHandle=null;try{await idbSet('backupDir',null)}catch(e){}}
+  renderDirNote();flash('백업 폴더 연결을 해제했습니다. 이제 백업은 일반 다운로드로 저장됩니다.')}
 async function latestBackupInDir(){
   let best=null;
   for await(const [name,h] of dirHandle.entries()){const m=BK_RE.exec(name);if(m&&h.kind==='file'&&(!best||name>best.name))best={name,h}}
   return best;
 }
 async function restoreFromDir(){
-  if(!dirHandle)return;
+  if(!dirOn())return;
   try{
+    if(NATIVE){
+      const b=await NATIVE.latestBackup();
+      if(!b)return flash('연결한 폴더에 매매장부_백업_날짜.json 파일이 없습니다.','warn');
+      return restore(new File([b.text],b.name,{type:'application/json'}),b.name);
+    }
     if(!await dirPerm(dirHandle,true))return flash('폴더 접근 권한이 없습니다. 다시 시도해 권한을 허용하세요.','warn');
     const b=await latestBackupInDir();
     if(!b)return flash('연결한 폴더에 매매장부_백업_날짜.json 파일이 없습니다.','warn');
@@ -2104,7 +2125,15 @@ async function saveHtml(){
 async function downloadBackup(quiet){
   db.lastBackup=todayStr();db.lastBackupN=recCount();db.backupSnooze='';save();
   const name=`매매장부_백업_${todayStr()}.json`,body=JSON.stringify(db,null,1);
-  if(dirHandle){
+  if(NATIVE&&nativeDir){
+    try{
+      if(await NATIVE.writeBackup(name,body)){
+        if(!quiet)flash(`백업을 "${nativeDir}" 폴더에 저장했습니다: ${name}`);
+        return 'dir';
+      }
+    }catch(e){}
+    flash('백업 폴더에 쓰지 못해 일반 다운로드로 저장했습니다. (폴더가 있는지 확인하세요)','warn');
+  }else if(dirHandle){
     try{
       if(await dirPerm(dirHandle,true)){
         const w=await (await dirHandle.getFileHandle(name,{create:true})).createWritable();await w.write(body);await w.close();
