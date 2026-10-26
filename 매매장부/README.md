@@ -144,7 +144,7 @@
 브라우저 없이 **더블클릭만으로 실행되는 프로그램**(`StockLedger-Portable.exe`)입니다. 설치가 필요 없고, 장부 파일(HTML)과 같은 화면·기능을 그대로 씁니다.
 
 - **내려받기**: https://github.com/ha0220/-/releases/download/desktop-latest/StockLedger-Portable.exe (GitHub 저장소의 Releases > `desktop-latest`). 장부 파일이 바뀌면 자동으로 새로 만들어집니다.
-- **처음 실행 시 경고**: 개발자 서명이 없는 프로그램이라 Windows SmartScreen이 "PC를 보호했습니다"를 띄울 수 있습니다. **추가 정보 → 실행**을 누르면 됩니다. 크기는 약 70~100MB입니다.
+- **처음 실행 시 경고**: 개발자 서명이 없는 프로그램이라 Windows SmartScreen이 "PC를 보호했습니다"를 띄울 수 있습니다. **추가 정보 → 실행**을 누르면 됩니다. 크기는 약 105MB입니다.
 - **데이터 위치**: 프로그램 전용 저장 공간(`%APPDATA%\StockLedger`)에 저장되며, exe 파일을 옮기거나 새 버전으로 바꿔도 유지됩니다. 단, 브라우저에서 쓰던 데이터와는 별개이므로 **브라우저 → 백업 저장 → 프로그램에서 불러오기**로 한 번 옮기세요.
 - **백업 폴더**: 설정 탭의 백업 폴더 연결(예: 구글 드라이브의 `주식매매` 폴더)을 쓰면 백업이 그 폴더에 바로 저장됩니다. 이 프로그램에서는 권한 재확인 없이 항상 동작합니다.
 - **직접 만들어 보기**: `매매장부/desktop`에서 `npm ci` → `npm start`(실행) / `npm run dist`(exe 생성). GitHub Actions(`PC 실행 프로그램 만들기`)가 Windows에서 자동으로 만들고 실행 점검까지 합니다.
