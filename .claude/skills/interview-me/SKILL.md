@@ -23,7 +23,9 @@ Apply this skill when:
 - The user hasn't said which value they're optimizing for when two reasonable ones are in tension (simplicity vs. flexibility, cost vs. speed)
 - The user explicitly invokes: "interview me", "grill me", "before we start, are we sure?", "stress-test my thinking"
 
-**When NOT to use:**
+> **Local override (this repository, ha0220/-):** the owner asked for this skill to apply **with no exceptions**. Whenever a request is missing the Why or the done criteria, run this skill first, even for information questions, mechanical edits, or when speed is requested. The list below is the upstream guidance and does **not** apply here.
+
+**When NOT to use (upstream only — overridden in this repository):**
 
 - The ask is unambiguous and self-contained ("rename this variable", "fix this typo")
 - The user has explicitly asked for speed over verification
@@ -33,7 +35,9 @@ Apply this skill when:
 
 ## Loading Constraints
 
-This skill needs a live, responsive user. **Do not invoke in non-interactive contexts** like CI pipelines, scheduled runs, `/loop`, or autonomous-loop. If you're in one of those and the ask is underspecified, flag that as a blocker for the user instead of guessing.
+This skill needs a live, responsive user. Upstream says not to invoke it in non-interactive contexts (CI, scheduled runs, `/loop`).
+
+> **Local override (this repository):** apply it there too. In a scheduled or non-interactive run, post the hypothesis and the first question, start no work, and wait for the user's answer.
 
 ## The Process
 
