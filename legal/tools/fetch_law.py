@@ -15,6 +15,10 @@ def fetch(name):
     for _ in range(4):
         p = curl('https://www.law.go.kr/법령/' + urllib.parse.quote(name))
         m = re.search(r'lsiSeq=(\d+)&amp;chrClsCd=(\d+).*?efYd=(\d*)', p)
+        if not m:  # 2026-11 화면 개편 후: lsPopViewAll2(lsiSeq ? lsiSeq : '285279', … efYd ? efYd : '20261008', … chrClsCd ? chrClsCd : '010202'
+            m2 = re.search(r"lsiSeq \? lsiSeq : '(\d+)'.*?efYd \? efYd : '(\d*)'.*?chrClsCd \? chrClsCd : '(\d+)'", p, re.S)
+            if m2:
+                m = type('M', (), {'groups': lambda self, g=m2.groups(): (g[0], g[2], g[1])})()
         if m: break
         time.sleep(3)
     if not m:
